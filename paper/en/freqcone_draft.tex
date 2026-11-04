@@ -1,0 +1,540 @@
+% FreqCone: Frequency Entailment Cones for Fine-Grained Generalized Category Discovery
+% Working draft. Every number in Section 5 is generated from the JSON results by make_tables.py
+% (macros.tex, tab_*.tex, lambda_sweep.dat). Section 6 is a protocol: nothing in it has been run.
+\documentclass[10pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,booktabs,graphicx,xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{algorithm,algpseudocode}
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\pgfplotsset{compat=1.16}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}[proposition]{Lemma}
+\DeclareMathOperator{\artanh}{artanh}
+\DeclareMathOperator{\sg}{sg}
+\newcommand{\Lb}{\mathcal{L}}
+\IfFileExists{macros.tex}{\input{macros.tex}}{}
+% placeholders for result prose, filled in after the sweep
+
+\title{FreqCone: Frequency Entailment Cones for\\ Fine-Grained Generalized Category Discovery}
+\author{Anonymous}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Generalized Category Discovery (GCD) must recognise known classes and discover novel ones in unlabelled data.
+Strong fine-grained GCD methods exploit class hierarchy, taken from external semantics, from noisy hierarchical
+pseudo-labels, or left implicit in hyperbolic geometry. We observe that every image already carries a
+deterministic, label-free hierarchy: low-pass filtering at increasing cut-off frequencies merges images that
+differ only in fine detail, which yields nested partitions of the data. FreqCone turns this frequency
+filtration into hyperbolic entailment. The low-passed view of an image must contain the image in its
+entailment cone, and the blur level is encoded as depth in the Poincar\'e ball rather than as a slice of
+latent dimensions. We prove that the filtration is a hierarchy, that slicing latent dimensions after a
+full-vector exponential map entangles depth, that zero cone energy implies depth ordering, and that cones bound
+the angle between an image and its blurred ancestors. A controlled mechanism study with 48 classes in two
+levels, one development seed and three held-out seeds, shows that the entailment weight trades fine-grained
+clustering accuracy for hierarchical consistency, and that a weight chosen on known-class validation data
+matches HypCD within seed variance (\dAllSel{} points of All accuracy over three held-out seeds). The cone acts
+only when sharp views lie deeper than their blurred ancestors, as the analysis predicts; otherwise it is vacuous
+or pushes samples away from their ancestors. On fresh seeds, letting the cone move the sharp-view norm activates
+it, at the price of fine-grained accuracy. In this setting FreqCone is a controllable trade-off rather than an
+accuracy gain.
+We release a drop-in PyTorch module and a protocol, with decision criteria fixed in advance, for the
+Semantic Shift Benchmark.
+\end{abstract}
+
+% =====================================================================================================
+\section{Introduction}
+Generalized Category Discovery (GCD)~\cite{vaze2022gcd} gives a model a labelled set that covers some of the
+classes and an unlabelled set that contains those classes and new ones; the model must group the unlabelled
+images into all classes. The fine-grained splits of the Semantic Shift Benchmark (SSB)~\cite{vaze2022ssb}
+(CUB, Stanford Cars, FGVC-Aircraft) are hard because a novel class often differs from a known one only in
+small details while sharing its coarse appearance: the body shape of a bird family, the silhouette of a car
+make, the airframe of an aircraft family.
+
+Recent methods exploit this shared coarse structure. SelEx~\cite{rastegar2024selex} builds hierarchical
+pseudo-labels by clustering at several granularities; SEAL~\cite{he2025seal} uses the semantic hierarchy that
+comes with each dataset; language-based methods such as ATCG~\cite{atcg2026} borrow concepts from text.
+HypCD~\cite{liu2025hypcd} maps features into the Poincar\'e ball, where tree-like structure embeds with low
+distortion, but leaves the hierarchy implicit. FourEx~\cite{rastegar2026fourex} supervises with
+Fourier-filtered views and assigns frequency bands to slices of the latent vector.
+
+We ask whether the image itself can supply a hierarchy that is label-free, deterministic rather than
+estimated, and compatible with hyperbolic geometry. Low-pass filtering satisfies the first two requirements.
+Blurring removes the details that separate sibling classes before it removes the layout shared by their
+parent, and the filters at increasing cut-offs form a filtration whose induced partitions are nested
+(Proposition~\ref{prop:filtration}). For the third requirement we show that latent slicing interacts badly
+with the full-vector exponential map of hyperbolic GCD (Proposition~\ref{prop:slice}). We therefore encode the
+blur level as depth: the blurred view is an ancestor whose entailment cone~\cite{ganea2018cones} must contain
+the sharp view. Khrulkov et al.~\cite{khrulkov2020hyperbolic} observed that ambiguous images tend to lie near
+the origin of a learned Poincar\'e embedding; FreqCone makes a related ordering an explicit training signal.
+
+A second motivation is practical. In retail shelf monitoring, a new product variant should be reported as
+``unknown item of known family X'' rather than only ``unknown''. Because coarse views of siblings share a
+direction, a novel sample can be attributed to the family of the nearest known class
+(Section~\ref{sec:attr}); we measure this as novel-to-parent attribution.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+\item FreqCone, a training objective that turns the low-pass filtration of each image into a chain of
+hyperbolic entailment constraints. Coarse views sit at fixed depths and two stop-gradients prevent the
+collapse modes we observed during development (Section~\ref{sec:method}). The objective adds two forward
+passes on blurred views during training and nothing at inference.
+\item An analysis: the filtration is a hierarchy; slicing after the exponential map entangles depth; zero cone
+energy implies depth ordering; cones bound the angle between a sample and its ancestors
+(Section~\ref{sec:analysis}). Every statement is also checked numerically in the released code.
+\item A controlled mechanism study that reports every variant we tried, including the failed ones, measures
+the trade-off set by the entailment weight, and identifies the depth condition under which the cone acts
+(Section~\ref{sec:mech}); and a protocol with decision criteria for the SSB evaluation (Section~\ref{sec:ssb}).
+\end{enumerate}
+
+% =====================================================================================================
+\section{Related work}
+\paragraph{Generalized category discovery.} GCD~\cite{vaze2022gcd} combines supervised and self-supervised
+contrastive learning with semi-supervised $k$-means. SimGCD~\cite{wen2023simgcd} trains a parametric
+classifier with self-distillation; $\mu$GCD~\cite{vaze2023mugcd} uses a mean-teacher. Recent work changes the
+representation geometry (HypCD~\cite{liu2025hypcd}; BIA~\cite{bia2026}, which enlarges the spectrum of the batch
+of class tokens), reduces bias (DebGCD~\cite{liu2025debgcd}, CausalGCD~\cite{causalgcd2026}), uses parts or
+tokens (APL~\cite{apl2025}, TAR~\cite{tar2026}, SubViT~\cite{subvit2026}), aligns teacher and student attention
+(FlipClass~\cite{flipclass2024}), or uses language (ATCG~\cite{atcg2026}).
+
+\paragraph{Hierarchy in GCD.} SelEx~\cite{rastegar2024selex} uses hierarchical pseudo-labels from $k$-means;
+SEAL~\cite{he2025seal} uses dataset hierarchies; HypCD relies on hyperbolic geometry without an explicit
+hierarchy. FreqCone needs no labels, no text and no clustering to obtain its hierarchy.
+
+\paragraph{Hyperbolic embeddings and entailment.} Hyperbolic image embeddings~\cite{khrulkov2020hyperbolic}
+and clipped hyperbolic classifiers~\cite{guo2022clipped} made the Poincar\'e ball practical for vision.
+Entailment cones~\cite{ganea2018cones} encode partial orders; MERU~\cite{desai2023meru},
+HyCoCLIP~\cite{pal2025hycoclip} and HySAC~\cite{poppi2025hysac} use them between images and text, where the
+text supplies the more general concept. GCD has no text; in FreqCone the blurred image plays that role.
+
+\paragraph{Frequency.} FourEx~\cite{rastegar2026fourex} trains GCD with low- and high-pass views assigned to
+separate latent slices; Feng and Ge~\cite{feng2025freqshift} study GCD under domain shift from a frequency
+perspective. FreqCone differs in what the frequency views mean: they are ancestors in a partial order, placed
+at depths, not extra positives or separate feature groups.
+
+% =====================================================================================================
+\section{Method}\label{sec:method}
+\paragraph{Setup.} Let $\mathcal{D}=\mathcal{D}_l\cup\mathcal{D}_u$ with $K$ classes. A backbone
+$\varphi$ and head $g$ give $z=g(\varphi(x))\in\mathbb{R}^n$. Following HypCD we use the Poincar\'e ball
+$\mathbb{D}^n_c=\{p:\ c\|p\|^2<1\}$, feature clipping $\mathrm{C}_r(z)=\min(1,r/\|z\|)\,z$ and
+\begin{equation}
+u(x)=\exp_0^c\big(\mathrm{C}_r(g(\varphi(x)))\big),\qquad
+\exp_0^c(v)=\tanh(\sqrt{c}\|v\|)\frac{v}{\sqrt{c}\|v\|}.
+\end{equation}
+With M\"obius addition $\oplus_c$, the distance and the depth are
+\begin{equation}
+d_c(p,q)=\tfrac{2}{\sqrt{c}}\artanh\big(\sqrt{c}\,\|(-p)\oplus_c q\|\big),\qquad
+\delta_c(p)=d_c(0,p)=\tfrac{2}{\sqrt{c}}\artanh(\sqrt{c}\|p\|).
+\end{equation}
+
+\paragraph{Frequency views.} For a radial ideal low-pass filter with cut-off $f$ (cycles per image),
+\begin{equation}
+L_f(x)=\mathcal{F}^{-1}\big(\mathbf{1}[\|\omega\|\le f]\odot\mathcal{F}(G_\sigma * x)\big),
+\end{equation}
+where $G_\sigma$ is a small Gaussian blur against ringing. Given cut-offs $f_a<f_b$ we build two coarse
+views $x^a=L_{f_a}(x)$ and $x^b=L_{f_b}(x)$ of the first augmented view $x$; $x'$ is the second view.
+
+\paragraph{Depth by blur level.} Coarse views are placed at fixed depths and the network chooses only
+their direction:
+\begin{equation}
+a=\frac{r_a}{\sqrt{c}}\frac{g(\varphi(x^a))}{\|g(\varphi(x^a))\|},\qquad
+b=\frac{r_b}{\sqrt{c}}\frac{g(\varphi(x^b))}{\|g(\varphi(x^b))\|},\qquad r_a<r_b .
+\end{equation}
+
+\paragraph{Directional alignment.} Coarse views learn to point at the other sharp view, which receives
+no gradient from this term ($\sg$ is the stop-gradient):
+\begin{equation}
+\Lb_{\mathrm{dir}}=\frac{1}{|B|}\sum_{i}\sum_{k\in\{a,b\}}
+-\log\frac{\exp(\cos(k_i,\sg(u'_i))/\tau_k)}{\sum_j \exp(\cos(k_i,\sg(u'_j))/\tau_k)} .
+\end{equation}
+
+\paragraph{Frequency entailment.} With $\tilde p=\sqrt{c}\,p$, the cone half-aperture and the exterior angle
+of Ganea et al.~\cite{ganea2018cones}, extended to curvature $-c$ by scaling, are
+\begin{align}
+\psi_c(p)&=\arcsin\Big(\min\Big\{1,\ K\frac{1-c\|p\|^2}{\sqrt{c}\|p\|}\Big\}\Big),\\
+\Xi_c(p,q)&=\arccos\left(\frac{\langle\tilde p,\tilde q\rangle(1+\|\tilde p\|^2)-\|\tilde p\|^2(1+\|\tilde q\|^2)}
+{\|\tilde p\|\,\|\tilde p-\tilde q\|\sqrt{1+\|\tilde p\|^2\|\tilde q\|^2-2\langle\tilde p,\tilde q\rangle}}\right),
+\end{align}
+and $E_c(p,q)=\max(0,\Xi_c(p,q)-\psi_c(p))$. The chain coarsest $\sqsubseteq$ coarse $\sqsubseteq$ sharp is
+enforced by
+\begin{equation}
+\Lb_{\mathrm{ent}}=\frac{1}{|B|}\sum_i\big[E_c(a_i,b_i)+E_c(b_i,\bar u_i)\big],\qquad
+\bar u_i=\sg(\|u_i\|)\frac{u_i}{\|u_i\|},
+\end{equation}
+so the cone can rotate the sharp view but never shrink its depth. With $K=0.1$, $r_a=0.12$ and $r_b=0.2$ the
+half-apertures are about $55^\circ$ at $a$ and $29^\circ$ at $b$; both radii exceed the lower bound
+$2K/(1+\sqrt{1+4K^2})\approx0.099$ of the cone's domain.
+
+\paragraph{Scale contraction.}
+\begin{equation}
+\Lb_{\mathrm{con}}=\frac{1}{|B|(|B|-1)}\sum_{i\neq j}\Big([d_c(a_i,a_j)-d_c(b_i,b_j)]_+ + [d_c(b_i,b_j)-d_c(u_i,u_j)]_+\Big).
+\end{equation}
+
+\paragraph{Objective.} $\Lb=\Lb_{\mathrm{base}}(u,u')+\lambda_{\mathrm{dir}}\Lb_{\mathrm{dir}}
++\lambda_{\mathrm{ent}}\Lb_{\mathrm{ent}}+\lambda_{\mathrm{con}}\Lb_{\mathrm{con}}$, where
+$\Lb_{\mathrm{base}}$ is the loss of the hyperbolic base method. Labels enter only through
+$\Lb_{\mathrm{base}}$ on the sharp views. Inference uses the original image only. Algorithm~\ref{alg:train}
+summarises one step.
+
+\begin{algorithm}[t]
+\caption{One FreqCone training step (added to a hyperbolic GCD base method).}\label{alg:train}
+\begin{algorithmic}[1]
+\Require batch $\{x_i\}$ with labels on the labelled subset; cut-offs $f_a<f_b$; radii $r_a<r_b$
+\State $x,x'\gets$ two augmentations; $u,u'\gets\exp_0^c(\mathrm{C}_r(g(\varphi(\cdot))))$ \Comment{as the base method}
+\State $x^a\gets L_{f_a}(x)$, $x^b\gets L_{f_b}(x)$
+\State $a\gets \tfrac{r_a}{\sqrt c}\,\widehat{g(\varphi(x^a))}$, $b\gets \tfrac{r_b}{\sqrt c}\,\widehat{g(\varphi(x^b))}$ \Comment{$\hat v=v/\|v\|$}
+\State $\Lb\gets\Lb_{\mathrm{base}}(u,u')+\lambda_{\mathrm{dir}}\Lb_{\mathrm{dir}}(a,b;\sg(u'))
++\lambda_{\mathrm{ent}}\Lb_{\mathrm{ent}}(a,b,\bar u)+\lambda_{\mathrm{con}}\Lb_{\mathrm{con}}(a,b,u)$
+\State update $\varphi,g$ by back-propagating $\Lb$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cost.} Each image needs two extra forward and backward passes on coarse views, as in FourEx.
+Because $L_f(x)$ has no energy above $f$, a coarse view can be resized to 112 pixels without aliasing whenever
+$f$ is below the new Nyquist limit of 56 cycles per image; for a ViT-B/14 this quarters the number of tokens.
+$\Lb_{\mathrm{con}}$ costs $O(|B|^2 n)$.
+
+\paragraph{Attribution of novel samples.}\label{sec:attr} Let $\bar b_k$ be the mean coarse view of known
+class $k$, projected back to radius $r_b/\sqrt c$. A sample $u$ is attributed to the family of
+$\arg\min_k E_c(\bar b_k,u)$, with ties broken by the angle. This uses only the trained model and the labelled
+set. We propose this rule for deployment but have not evaluated it: the mechanism study of
+Section~\ref{sec:mech} measures attribution with the nearest labelled class prototype instead.
+
+% =====================================================================================================
+\section{Analysis}\label{sec:analysis}
+\begin{proposition}[Low-pass filtration is a hierarchy]\label{prop:filtration}
+Let $d_f(x,y)=\|L_f(x-y)\|_2$ (with $G_\sigma$ absorbed). Then (i) $L_fL_{f'}=L_{\min(f,f')}$;
+(ii) $d_f(x,y)$ is non-decreasing in $f$; (iii) for every $\eta>0$, the connected components
+$\mathcal{P}_f(\eta)$ of the graph linking images with $d_f\le\eta$ satisfy: if $f\le f'$, every block of
+$\mathcal{P}_{f'}(\eta)$ is contained in a block of $\mathcal{P}_f(\eta)$.
+\end{proposition}
+\begin{proof}
+(i) The masks are indicators of nested discs. (ii) By Parseval,
+$d_f(x,y)^2=\frac{1}{HW}\sum_{\|\omega\|\le f}|\widehat{G_\sigma(x-y)}(\omega)|^2$, a sum of non-negative terms over
+an index set that grows with $f$. (iii) A chain of steps with $d_{f'}\le\eta$ is, by (ii), also a chain with
+$d_f\le\eta$.
+\end{proof}
+
+\begin{proposition}[Slicing after the exponential map entangles depth]\label{prop:slice}
+Let $z=(z_A,z_B)$, $z_A\neq 0$, and $P_A$ the coordinate projection. Then
+$\|P_A\exp_0^c(z)\|=\frac{\tanh(\sqrt{c}\|z\|)}{\sqrt{c}\|z\|}\|z_A\|\le\|\exp_0^c(z_A)\|$, with equality iff
+$z_B=0$; the depth of the $A$-slice is strictly decreasing in $\|z_B\|$.
+\end{proposition}
+\begin{proof}
+$h(t)=\tanh(t)/t$ is strictly decreasing on $(0,\infty)$ since $h'(t)=(t\,\mathrm{sech}^2t-\tanh t)/t^2<0$,
+equivalently $\sinh 2t>2t$; and $\|z\|\ge\|z_A\|$. Depth is increasing in the Euclidean norm.
+\end{proof}
+Hence, when frequency bands are assigned to latent slices after a full-vector exponential map, the depth of one
+band depends on the energy of the other, so depth cannot encode the frequency level.
+
+\begin{lemma}[Cones imply depth ordering]\label{lem:depth}
+If $E_c(p,q)=0$ and $\psi_c(p)\le\pi/2$, then $\delta_c(q)\ge\delta_c(p)$, strictly if $\psi_c(p)<\pi/2$ and
+$q\neq p$.
+\end{lemma}
+\begin{proof}
+Let $\gamma$ be the geodesic from $p$ to $q$ and $f(t)=\delta_c(\gamma(t))$. Hyperbolic space is
+CAT(0)~\cite{bridson1999metric}, so $f$ is convex. The gradient of $\delta_c$ at $p$ is the outward radial unit
+vector and the model is conformal, hence $f'(0)=\cos\Xi_c(p,q)$, where $\Xi_c(p,q)=\pi-\angle Opq$. Zero energy
+gives $\Xi_c\le\psi_c\le\pi/2$, so $f'(0)\ge0$ and the convex $f$ is non-decreasing.
+\end{proof}
+
+\begin{proposition}[Contraction transfers the hierarchy]\label{prop:contraction}
+If $\Lb_{\mathrm{con}}=0$ on a set of images, then for every $\eta$ the $\eta$-components of $\{u_i\}$
+refine those of $\{b_i\}$, which refine those of $\{a_i\}$.
+\end{proposition}
+\begin{proof}Identical to Proposition~\ref{prop:filtration}(iii) with $d_c$ in place of $d_f$.\end{proof}
+
+\begin{proposition}[Cones bound angular deviation]\label{prop:angle}
+If $E_c(p,q)=0$ then the angle at the origin satisfies $\angle(p,q)<\psi_c(p)$.
+Consequently, for images $i,j$ with $\angle(a_i,a_j)\le\eta$ whose sharp views lie in their coarse cones,
+$\angle(u_i,u_j)<\psi_c(a_i)+\eta+\psi_c(a_j)$.
+\end{proposition}
+\begin{proof}
+In the hyperbolic triangle $O,p,q$ the angle at $p$ is $\pi-\Xi_c(p,q)\ge\pi-\psi_c(p)$; the angle sum is below
+$\pi$, so the angle at $O$ is below $\psi_c(p)$. Geodesics through $O$ are straight lines, so this is the
+Euclidean angle. The second statement is the triangle inequality for angles on the sphere.
+\end{proof}
+
+\paragraph{Remark (when a cone cannot act).} If $\delta_c(q)<\delta_c(p)$, Lemma~\ref{lem:depth} gives
+$E_c(p,q)>0$ for every direction of $q$. Moreover, for $q$ on the ray of $p$ the geodesic from $p$ to $q$ points
+at the origin, so $\Xi_c(p,q)=\pi$, the largest possible value. Hence, if the norm of $q$ is held fixed, any
+descent on $E_c$ rotates $q$ away from the direction of $p$. For the depths met in Section~\ref{sec:mech}
+($\delta_c(b)=1.81$, $\delta_c(u)=1.3$) the minimising angle is $42.7^\circ$ and the minimum of $\Xi_c$ is
+$135^\circ$, far above $\psi_c(b)=28.7^\circ$; for $\delta_c(u)=4.6$ the minimising angle is $0$.
+
+\paragraph{Numerical checks.} \texttt{verify\_math.py} checks the closed form of $\Xi_c$ against the angle
+computed from the geodesic (error $7\times10^{-12}$), the curvature scaling, Lemma~\ref{lem:depth} on random
+pairs inside cones (minimum depth gain $+0.022$), Proposition~\ref{prop:angle} (on every sampled pair the angle at the
+origin is at least $0.020$\,rad below $\psi_c$), Proposition~\ref{prop:slice} (slice norms shrink by 19\% on average
+for random vectors) and Proposition~\ref{prop:filtration} on random images.
+
+\paragraph{What the analysis does not show.} Proposition~\ref{prop:filtration} is about pixel distances; whether
+the frequency hierarchy matches the semantic one is an empirical question that depends on the dataset.
+Proposition~\ref{prop:angle} bounds how far siblings can drift apart; it says nothing about how close they are
+pushed, which is where fine-grained accuracy can be lost (Section~\ref{sec:mech}).
+
+% =====================================================================================================
+\section{Mechanism study}\label{sec:mech}
+This study runs on CPU with synthetic data. It tests whether the mechanism behaves as the analysis predicts
+and what it costs; it does not replace the SSB evaluation of Section~\ref{sec:ssb}.
+
+\paragraph{Data (SpecHier-48).} Eight parents times six children give 48 classes of $16\times16$ images. A
+parent is a smooth layout of three Gaussian blobs (low frequency); a child adds an oriented grating at about
+five cycles per image (high frequency). The six orientations are shared by all parents and permuted per parent,
+so a class is identified only by the combination. Images are shifted by up to 3 pixels, the grating phase,
+contrast and brightness are random, and white noise with $\sigma=0.35$ is added. Logistic regression on raw
+pixels reaches 14.4\% on the 48 classes and 83.3\% on the parents.
+Each parent has three known and three novel children (24/24 classes, 60 images per class); half of the
+known-class images are labelled (720), and the remaining 2160 images are unlabelled. Twenty further images per
+known class form a validation set that is never trained on.
+
+\paragraph{Model and training.} A four-layer CNN (widths 32-64-96-128) with a $128\to32$ head is trained from
+scratch for 40 epochs with AdamW (learning rate $2\cdot10^{-3}$, batch 192). Hyperbolic methods use $c=0.05$,
+$r=2.3$ and the hybrid angle-to-distance loss of HypCD; FreqCone uses $f_a=1.5$, $f_b=3$ cycles per image and the
+other hyper-parameters of Section~\ref{sec:method} ($\lambda_{\mathrm{dir}}=0.5$, $\lambda_{\mathrm{con}}=0.05$,
+$\tau_a=0.5$, $\tau_b=0.3$).
+
+\paragraph{Methods.} GCD (spherical supervised plus self-supervised contrastive loss); HypCD; a FourEx-style
+partition on HypCD (one half of the latent vector trained with low-pass views, the other with high-pass views);
+low-pass positives on HypCD (the coarse views are ordinary positives of the second view); and FreqCone on HypCD.
+
+\paragraph{Metrics.} Semi-supervised $k$-means on backbone features, scored with one Hungarian matching over all
+unlabelled images (All/Old/New). Two structural metrics: parent accuracy ($k$-means with 8 clusters) and
+novel-to-parent attribution, the share of novel images whose nearest labelled class prototype has the same
+parent (chance 12.5\%).
+
+\paragraph{Protocol.} Seed 0 is the development seed; seeds 1--3 are held out, and each seed draws new data and
+a new initialisation. On seed 0 we sweep $\lambda_{\mathrm{ent}}\in\{0,0.03,0.1,0.3,1\}$ and select
+$\lambda^\star$ by the clustering accuracy on the known-class validation images ($k$-means with one cluster per
+known class, Hungarian matching), breaking ties toward the smaller weight. The rule was fixed before the sweep
+was run; no novel-class label is used for selection. A first criterion, nearest-prototype accuracy on the
+validation images, reached 100\% for $\lambda_{\mathrm{ent}}=0$ and could not rank the weights, so it was
+replaced before any other weight was evaluated. On the held-out seeds we also report $\lambda_{\mathrm{ent}}=0$
+(FreqCone without $\Lb_{\mathrm{ent}}$, an ablation) and $\lambda_{\mathrm{ent}}=1$ (the strong end of the
+trade-off); neither was used to choose anything.
+
+\subsection{Design log on the development seed}
+Table~\ref{tab:designlog} lists every FreqCone variant we trained with $\lambda_{\mathrm{ent}}=1$. All three
+produce strong parent structure, but the first two damage fine-grained accuracy for identifiable reasons.
+In v0 the sharp views were pulled toward the origin (depth \logDepthVzero{} against the clipping limit
+4.60), where cones approach half-spaces. Detaching the sharp-view norm inside $\Lb_{\mathrm{ent}}$ (v1) did not
+help (depth \logDepthVone), so the inward pull did not come from $\Lb_{\mathrm{ent}}$. The causes were
+$\Lb_{\mathrm{dir}}$, which pulled the sharp view toward a coarse view that only knows the parent and so merged
+siblings, and the shared encoder, which shrank every norm to widen the cones. v2 fixes the coarse depths and
+stops the gradient to the sharp view in $\Lb_{\mathrm{dir}}$; sharp views return to the boundary
+(depth \logDepthVtwo). With $\lambda_{\mathrm{ent}}=1$, however, v2 still loses fine-grained accuracy, which
+motivates selecting the weight.
+
+\begin{table}[t]
+\centering\small
+\IfFileExists{tab_designlog.tex}{\resizebox{\linewidth}{!}{\input{tab_designlog.tex}}}{}
+\caption{Development seed 0, $\lambda_{\mathrm{ent}}=1$. Depth is the mean $\delta_c(u)$ of sharp views; the
+clipping radius limits it to 4.60. For reference, spherical GCD reaches 80.0 / 73.6 / 83.2 with 22.8\% parent
+accuracy and 23.5\% novel-to-parent attribution.}\label{tab:designlog}
+\end{table}
+
+\subsection{Selecting the entailment weight}
+On the development seed (Figure~\ref{fig:sweep}) the rule selects $\lambda^\star=\selLambda$, whose validation
+clustering accuracy (\devValcb\%) is the highest of the five weights. Validation and test disagree at
+$\lambda_{\mathrm{ent}}=0.1$: test All accuracy is higher (\devAllc{} against \devAllb) and parent accuracy rises
+from \devParb{} to \devParc\%, while validation accuracy falls to \devValcc\%. A plausible reason is that the
+validation set contains only known classes, so it cannot reward a parent structure that helps to group novel
+images. We keep $\lambda^\star$ as selected and report $\lambda_{\mathrm{ent}}=0.1$ only in the sensitivity
+analysis. From $\lambda_{\mathrm{ent}}=0.3$ on, both structural metrics keep rising while All accuracy falls, to
+\devAlle\% at $\lambda_{\mathrm{ent}}=1$. This matches the limitation stated after
+Proposition~\ref{prop:angle}: cones bound how far siblings drift apart, but nothing keeps them apart.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{lambda_sweep.dat}{%
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.6cm},
+  width=0.47\linewidth, height=5.2cm, xtick={0,1,2,3,4}, xticklabels={0,0.03,0.1,0.3,1},
+  xlabel={$\lambda_{\mathrm{ent}}$}, ymin=0, ymax=100, grid=major, grid style={gray!20},
+  legend style={font=\scriptsize, draw=none, fill=white, fill opacity=0.8, text opacity=1}, tick label style={font=\scriptsize}]
+\nextgroupplot[title={\small (a) fine-grained clustering}, ylabel={accuracy (\%)}, legend pos=south west]
+\addplot[blue!70!black, thick, mark=*] table[x=idx, y=all] {lambda_sweep.dat};
+\addplot[gray, thick, dashed, mark=square*] table[x=idx, y=valc] {lambda_sweep.dat};
+\addplot[gray, dotted, thick, domain=0:4, samples=2] {\logAllHyp};
+\legend{All (test), known-class validation, HypCD All}
+\nextgroupplot[title={\small (b) hierarchical consistency}, legend pos=south east]
+\addplot[blue!70!black, thick, mark=*] table[x=idx, y=n2p] {lambda_sweep.dat};
+\addplot[gray, thick, dashed, mark=square*] table[x=idx, y=parent] {lambda_sweep.dat};
+\addplot[gray, dotted, thick, domain=0:4, samples=2] {\logNtpHyp};
+\legend{novel-to-parent, parent accuracy, HypCD novel-to-parent}
+\end{groupplot}
+\end{tikzpicture}}{\fbox{lambda sweep not available}}
+\caption{Development seed 0. Raising $\lambda_{\mathrm{ent}}$ trades fine-grained accuracy (a) for hierarchical
+consistency (b). The validation curve in (a) uses only known-class images and is the selection criterion.}
+\label{fig:sweep}
+\end{figure}
+
+\subsection{Held-out seeds}
+\begin{table}[t]
+\centering\small
+\IfFileExists{tab_heldout.tex}{\input{tab_heldout.tex}}{}
+\caption{Held-out seeds 1--3, mean {\scriptsize$\pm$} standard deviation. Bold marks the best mean per column.}
+\label{tab:heldout}
+\end{table}
+\begin{table}[t]
+\centering\small
+\IfFileExists{tab_paired.tex}{\input{tab_paired.tex}}{}
+\caption{Paired difference to HypCD on the same seed, in points; in brackets, the number of seeds on which the
+method is better.}\label{tab:paired}
+\end{table}
+Table~\ref{tab:heldout} reports the held-out seeds and Table~\ref{tab:paired} the paired differences to
+HypCD. At $\lambda^\star$, FreqCone exceeds HypCD by \dAllSel{} points of All accuracy and wins on \wAllSel{}
+seeds, while the standard deviation across seeds is about 10 points; against FreqCone without
+$\Lb_{\mathrm{ent}}$ the difference is \pairSelVsWzeroAll{} (\pairwSelVsWzeroAll{} seeds). At the selected weight
+this study therefore shows no reliable gain in clustering accuracy, and novel-to-parent attribution does not
+improve either (\dNtpSel{} points).
+
+Two comparisons are clearer. Treating blurred views as ordinary positives (H4) costs \dAllNaive{} points of All
+accuracy and loses on every seed, while raising novel-to-parent attribution by \dNtpNaive{} points; FreqCone with
+$\lambda_{\mathrm{ent}}=1$ is \pairWoneVsNaiveAll{} points more accurate on all three seeds but
+\pairWoneVsNaiveNtp{} points lower in attribution, so the two sit at different points of the same trade-off.
+Assigning frequency bands to latent slices on the same hyperbolic base (H3) costs \dAllFour{} points of All
+and \dNewFour{} points of New accuracy relative to HypCD; FreqCone at $\lambda^\star$ is \pairSelVsFourAll{}
+points above it (\pairwSelVsFourAll{} seeds).
+
+\paragraph{Two depth regimes.} The large spread across seeds has a specific cause (Table~\ref{tab:regimes}).
+On seeds 0 and 3, HypCD pushes sharp views to the clipping boundary (depth 4.60), deeper than the coarse view
+$b$ (fixed at depth 1.81); cones are satisfiable and the share of sharp views inside their cone grows with
+$\lambda_{\mathrm{ent}}$, which produces the trade-off of Figure~\ref{fig:sweep}. On seeds 1 and 2, HypCD keeps
+sharp views at depth about 1.2, shallower than $b$. By Lemma~\ref{lem:depth} no sharp view can then lie in its
+cone (0\% at every weight), and because v2 detaches the sharp-view norm inside $\Lb_{\mathrm{ent}}$, the cone can
+only rotate the sharp view; by the Remark in Section~\ref{sec:analysis} it rotates it away from its own coarse
+view. The measured angle between $b$ and $u$ on these seeds is about $45^\circ$, against the predicted
+$42.7^\circ$. In this regime $\Lb_{\mathrm{ent}}$ does the opposite of its purpose: accuracy can rise (seed 1:
+$+10.4$ points at $\lambda_{\mathrm{ent}}=1$) but no hierarchy forms. Averages over seeds therefore mix two
+different mechanisms. The direct fix is to let the cone move the sharp-view norm (v3, next subsection): with
+coarse depths fixed, moving a sharp view outward along its ray never increases $\Xi_c$ (checked on
+$2\times10^5$ random configurations), so the fix should not reopen the collapse toward the origin.
+
+\begin{table}[t]
+\centering\small
+\IfFileExists{tab_regimes.tex}{\resizebox{\linewidth}{!}{\input{tab_regimes.tex}}}{}
+\caption{Per-seed diagnostics of FreqCone v2. $\delta_c(u)$ is the mean depth of sharp views (the coarse view
+$b$ sits at 1.81); ``in cone'' is the share of sharp views inside the cone of their coarse view $b$; $\Delta$ are
+differences to HypCD on the same seed, in points.}\label{tab:regimes}
+\end{table}
+
+\subsection{v3 on fresh seeds}
+v3 removes the stop-gradient on the sharp-view norm in $\Lb_{\mathrm{ent}}$ and changes nothing else. Because
+seeds 1--3 motivated it, we evaluate it on three fresh seeds (4--6), with the weight selected for v2
+($\lambda^\star=\selLambda$) and with $\lambda_{\mathrm{ent}}=1$; no weight is re-selected. Two questions were
+written into the run script before any v3 result existed (Table~\ref{tab:v3}).
+
+\emph{Q1: does v3 put sharp views inside their cones where v2 cannot?} Only at $\lambda_{\mathrm{ent}}=1$. At
+$\lambda^\star$ the sharp views of v3 stay at depth about 1.3 and none lies inside its cone, so the outward force
+of $\Lb_{\mathrm{ent}}$ is too weak against the rest of the objective. At $\lambda_{\mathrm{ent}}=1$, v3 moves them
+to the boundary on every fresh seed, \VthreeConeRange{} of them lie inside their cone, and novel-to-parent
+attribution reaches 93.8--99.5\%. Seed 4 also shows that the shallow regime is not inherited from the base model
+alone: HypCD reaches the boundary there, while v2 and v3 at $\lambda^\star$ stay shallow.
+
+\emph{Q2: accuracy.} On these seeds v2 at $\lambda^\star$ is \vdAllVtwo{} points of All accuracy above HypCD
+(\vwAllVtwo{} seeds) but \vdNtpVtwo{} points lower in novel-to-parent attribution (\vwNtpVtwo{}), as expected from a
+cone that pushes samples away from their parents. At $\lambda^\star$, v3 is not better than v2 (\vdAllVthreeVsVtwo{} points of All accuracy,
+better on \vwAllVthreeVsVtwo{} seeds) and differs from HypCD by \vdAllVthree{} (\vwAllVthree{}). With an active
+cone ($\lambda_{\mathrm{ent}}=1$) it differs from HypCD by \vdAllVthreeWone{} points of All accuracy and
+\vdNtpVthreeWone{} points of novel-to-parent attribution. The fix repairs the mechanism but not the outcome:
+Proposition~\ref{prop:angle} caps the angle between siblings that share a coarse direction at about
+$2\psi_c(b)\approx57^\circ$, and once the cone is active this cap binds and fine-grained accuracy falls. Wider
+cones (a larger $K$) relax the cap; we have not tested them.
+
+\begin{table}[t]
+\centering\small
+\IfFileExists{tab_v3.tex}{\input{tab_v3.tex}}{}
+\caption{FreqCone v3 on fresh seeds 4--6. v3 differs from v2 only in letting $\Lb_{\mathrm{ent}}$ move the norm of
+the sharp view. ``In cone'' is the share of sharp views inside the cone of their coarse view $b$.}\label{tab:v3}
+\end{table}
+
+\subsection{What the study shows and what it does not}
+\paragraph{What the study supports.} The mechanism behaves as the analysis predicts. When sharp views are deeper
+than their coarse views, the cone is satisfiable and produces a strong hierarchy, with novel-to-parent
+attribution up to 97--99\%. When they are shallower, no sample can enter its cone (Lemma~\ref{lem:depth}) and a
+norm-detached cone pushes samples away from their parents (Remark in Section~\ref{sec:analysis}). Entailment is
+far less destructive than treating blurred views as positives, and encoding frequency as depth does better than a
+latent partition on the same hyperbolic base.
+
+\paragraph{What it does not support.} At the weight selected on validation data, FreqCone does not improve
+clustering accuracy reliably over HypCD, and whenever the cone is active the hierarchy costs fine-grained
+accuracy. In this setting FreqCone is a controllable trade-off between hierarchical consistency and fine-grained
+accuracy, not an accuracy improvement.
+
+\paragraph{Caveats.} The data are synthetic and their frequency hierarchy is the semantic one by construction; the
+encoder is a small CNN trained from scratch, not a pre-trained ViT; each comparison uses three seeds and the
+variance across seeds is large; novel-to-parent attribution is measured with class prototypes, not with the cone
+rule of Section~\ref{sec:attr}.
+
+\paragraph{Implications for the SSB evaluation.} Log the sharp-view depth and the share of samples inside their
+cone during training; sweep the cone aperture $K$ together with $\lambda_{\mathrm{ent}}$; and report family-level
+attribution next to All, Old and New accuracy.
+
+% =====================================================================================================
+\section{Protocol for the SSB evaluation}\label{sec:ssb}
+No number in this section has been run. Backbone: DINOv2 ViT-B/14~\cite{oquab2024dinov2}. Base methods:
+Hyp-SimGCD and Hyp-SelEx from the official HypCD code, re-run in the same environment, each with and without
+FreqCone; FourEx from its official code for the latent-partition comparison. Data: CUB, Stanford Cars and
+FGVC-Aircraft from SSB, with Herbarium19, CIFAR-100 and ImageNet-100 to check that FreqCone does no harm on
+coarse data. Scoring: one Hungarian matching over all unlabelled images, last epoch, three seeds, mean and
+standard deviation. Hyper-parameters, including $\lambda_{\mathrm{ent}}$, are selected on known-class validation
+data as in Section~\ref{sec:mech}.
+
+\paragraph{Decision criteria, fixed in advance.} FreqCone is called effective if its mean New accuracy exceeds
+that of the base method by at least 1.0 point on at least two of the three SSB datasets, for both base methods,
+with a paired win on at least two of three seeds, and if All accuracy drops by no more than 0.5 points on any
+dataset. Negative results will be reported, in particular on Stanford Cars, where FourEx reports lower New
+accuracy than SelEx (73.2 against 76.7).
+
+\paragraph{Ablations.} Removing $\Lb_{\mathrm{dir}}$, $\Lb_{\mathrm{ent}}$ or $\Lb_{\mathrm{con}}$; entailment
+against low-pass positives; depth encoding against a latent partition on the same hyperbolic base; one, two or
+three blur levels; cone aperture $K$; Euclidean against hyperbolic cones; 112-pixel coarse views.
+
+\paragraph{Analyses.} Mean depth per blur level and the share of ordered triples
+$\delta_c(a)\le\delta_c(b)\le\delta_c(u)$; whether the frequency hierarchy matches the semantic one, measured
+with the manufacturer and family labels of FGVC-Aircraft and the makes of Stanford Cars; and novel-to-family
+attribution with the rule of Section~\ref{sec:attr}.
+
+% =====================================================================================================
+\section{Limitations}
+The evidence for FreqCone in this draft comes from proofs and from a synthetic mechanism study; whether it
+improves GCD on natural images is decided by the protocol of Section~\ref{sec:ssb}, which has not been run.
+SpecHier-48 is built so that the frequency hierarchy is the semantic one; on real data, blurred views can be
+dominated by background or pose rather than by family. Cones constrain directions but not how close siblings
+are, so a large entailment weight can merge them, as Figure~\ref{fig:sweep} shows. The coarse views roughly
+double the training cost unless they are processed at reduced resolution.
+
+% =====================================================================================================
+\begin{thebibliography}{99}\small
+\bibitem{vaze2022gcd} S.~Vaze, K.~Han, A.~Vedaldi, A.~Zisserman. Generalized Category Discovery. CVPR, 2022.
+\bibitem{vaze2022ssb} S.~Vaze, K.~Han, A.~Vedaldi, A.~Zisserman. Open-Set Recognition: a Good Closed-Set Classifier is All You Need? ICLR, 2022.
+\bibitem{wen2023simgcd} X.~Wen, B.~Zhao, X.~Qi. Parametric Classification for Generalized Category Discovery: A Baseline Study. ICCV, 2023.
+\bibitem{vaze2023mugcd} S.~Vaze, A.~Vedaldi, A.~Zisserman. No Representation Rules Them All in Category Discovery. NeurIPS, 2023.
+\bibitem{rastegar2024selex} S.~Rastegar, M.~Salehi, Y.~M.~Asano, H.~Doughty, C.~G.~M.~Snoek. SelEx: Self-Expertise in Fine-Grained Generalized Category Discovery. ECCV, 2024.
+\bibitem{liu2025hypcd} Y.~Liu, Z.~He, K.~Han. Hyperbolic Category Discovery. CVPR, 2025.
+\bibitem{liu2025debgcd} Y.~Liu, K.~Han. DebGCD: Debiased Learning with Distribution Guidance for Generalized Category Discovery. ICLR, 2025.
+\bibitem{rastegar2026fourex} S.~Rastegar, M.~Ghadimi~Atigh, P.~Mettes, Y.~M.~Asano, C.~G.~M.~Snoek. Fourier Self-Supervision for Fine-Grained Generalized Category Discovery. arXiv:2608.08963, 2026.
+\bibitem{he2025seal} Z.~He, Y.~Liu, K.~Han. SEAL: Semantic-Aware Hierarchical Learning for Generalized Category Discovery. NeurIPS, 2025.
+\bibitem{bia2026} Tang et~al. Bures-Isotropy Alignment: Manifold Learning of Generalized Category Discovery. ICLR, 2026.
+\bibitem{flipclass2024} H.~Lin et~al. Flipped Classroom: Aligning Teacher Attention with Student in Generalized Category Discovery. NeurIPS, 2024.
+\bibitem{apl2025} Dai et~al. Adaptive Part Learning for Fine-Grained Generalized Category Discovery. CVPR, 2025.
+\bibitem{tar2026} Yang et~al. TAR: Token-Aware Refinement for Fine-grained Generalized Category Discovery. CVPR, 2026.
+\bibitem{atcg2026} Han et~al. Learning Like Humans: Analogical Concept Learning for Generalized Category Discovery. CVPR, 2026.
+\bibitem{causalgcd2026} Feng et~al. Seeing Through the Shift: Causality-Inspired Robust Generalized Category Discovery. CVPR, 2026.
+\bibitem{subvit2026} Zhu et~al. Subtoken Vision Transformer for Fine-grained Recognition. arXiv, 2026.
+\bibitem{feng2025freqshift} Feng, Ge. Generalized Category Discovery under Domain Shift: A Frequency Domain Perspective. NeurIPS, 2025.
+\bibitem{ganea2018cones} O.-E.~Ganea, G.~B\'ecigneul, T.~Hofmann. Hyperbolic Entailment Cones for Learning Hierarchical Embeddings. ICML, 2018.
+\bibitem{khrulkov2020hyperbolic} V.~Khrulkov, L.~Mirvakhabova, E.~Ustinova, I.~Oseledets, V.~Lempitsky. Hyperbolic Image Embeddings. CVPR, 2020.
+\bibitem{guo2022clipped} Y.~Guo, X.~Wang, Y.~Chen, S.~X.~Yu. Clipped Hyperbolic Classifiers Are Super-Hyperbolic Classifiers. CVPR, 2022.
+\bibitem{desai2023meru} K.~Desai, M.~Nickel, T.~Rajpurohit, J.~Johnson, R.~Vedantam. Hyperbolic Image-Text Representations. ICML, 2023.
+\bibitem{pal2025hycoclip} A.~Pal et~al. Compositional Entailment Learning for Hyperbolic Vision-Language Models. ICLR, 2025.
+\bibitem{poppi2025hysac} T.~Poppi et~al. Hyperbolic Safety-Aware Vision-Language Models. CVPR, 2025.
+\bibitem{oquab2024dinov2} M.~Oquab et~al. DINOv2: Learning Robust Visual Features without Supervision. TMLR, 2024.
+\bibitem{bridson1999metric} M.~R.~Bridson, A.~Haefliger. Metric Spaces of Non-Positive Curvature. Springer, 1999.
+\end{thebibliography}
+\end{document}

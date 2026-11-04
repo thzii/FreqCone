@@ -1,0 +1,346 @@
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7282407407407407, "old": 0.6541666666666667, "new": 0.7652777777777777, "parent_acc": 0.43194444444444446, "novel_to_parent": 0.6423611111111112, "val_known": 1.0, "val_cluster": 0.8979166666666667, "in_cone_b_u": 0.0498046875, "angle_b_u_deg": 30.65937042236328, "depth_a": 1.0785095331957528, "depth_b": 1.8132951873011462, "depth_full": 4.599999853759369, "frac_ordered": 1.0, "method": "freqcone_w0", "seed": 0, "train_time_s": 218.3, "w_ent": 0.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7430555555555556, "old": 0.6444444444444445, "new": 0.7923611111111111, "parent_acc": 0.3768518518518518, "novel_to_parent": 0.6680555555555555, "val_known": 0.9958333333333333, "val_cluster": 0.9166666666666666, "in_cone_b_u": 0.07421875, "angle_b_u_deg": 28.031538009643555, "depth_a": 1.0785095334319854, "depth_b": 1.8132951903327954, "depth_full": 4.599999862160464, "frac_ordered": 1.0, "method": "freqcone_w0.03", "seed": 0, "train_time_s": 219.8, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7773148148148148, "old": 0.75, "new": 0.7909722222222222, "parent_acc": 0.7222222222222222, "novel_to_parent": 0.7611111111111111, "val_known": 0.9895833333333334, "val_cluster": 0.8083333333333333, "in_cone_b_u": 0.1708984375, "angle_b_u_deg": 23.29593276977539, "depth_a": 1.078509536857355, "depth_b": 1.81329518839254, "depth_full": 4.599999852559213, "frac_ordered": 1.0, "method": "freqcone_w0.1", "seed": 0, "train_time_s": 217.6, "w_ent": 0.1}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6393518518518518, "old": 0.6361111111111111, "new": 0.6409722222222223, "parent_acc": 0.8560185185185185, "novel_to_parent": 0.9097222222222222, "val_known": 0.96875, "val_cluster": 0.7270833333333333, "in_cone_b_u": 0.4638671875, "angle_b_u_deg": 17.084077835083008, "depth_a": 1.0785095356761931, "depth_b": 1.8132951865735507, "depth_full": 4.599999847758587, "frac_ordered": 1.0, "method": "freqcone_w0.3", "seed": 0, "train_time_s": 214.9, "w_ent": 0.3}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.4888888888888889, "old": 0.42777777777777776, "new": 0.5194444444444445, "parent_acc": 1.0, "novel_to_parent": 0.9701388888888889, "val_known": 0.88125, "val_cluster": 0.55625, "in_cone_b_u": 0.82421875, "angle_b_u_deg": 12.389045715332031, "depth_a": 1.0785095370935875, "depth_b": 1.8132951866948166, "depth_full": 4.5999998717617165, "frac_ordered": 1.0, "method": "freqcone_w1", "seed": 0, "train_time_s": 212.8, "w_ent": 1.0}
+selected lambda_ent = 0.03
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7902777777777777, "old": 0.8847222222222222, "new": 0.7430555555555556, "parent_acc": 0.22361111111111112, "novel_to_parent": 0.1875, "val_known": 0.9958333333333333, "val_cluster": 0.8875, "method": "gcd", "seed": 1, "train_time_s": 79.0, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7333333333333333, "old": 0.6875, "new": 0.75625, "parent_acc": 0.22268518518518518, "novel_to_parent": 0.09722222222222222, "val_known": 0.9875, "val_cluster": 0.825, "in_cone_b_u": 0.0, "angle_b_u_deg": 68.15534210205078, "depth_a": 1.2804174114832598, "depth_b": 1.3262449326638355, "depth_full": 1.1730261827249842, "frac_ordered": 0.111328125, "method": "hypcd", "seed": 1, "train_time_s": 115.4, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6972222222222222, "old": 0.7361111111111112, "new": 0.6777777777777778, "parent_acc": 0.2162037037037037, "novel_to_parent": 0.04791666666666667, "val_known": 0.9854166666666667, "val_cluster": 0.8041666666666667, "in_cone_b_u": 0.0009765625, "angle_b_u_deg": 51.24306106567383, "depth_a": 0.9761951376337282, "depth_b": 1.063599798683993, "depth_full": 1.2079990690908557, "frac_ordered": 0.6767578125, "method": "fourex_partition", "seed": 1, "train_time_s": 216.0, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6277777777777778, "old": 0.7055555555555556, "new": 0.5888888888888889, "parent_acc": 0.38425925925925924, "novel_to_parent": 0.6222222222222222, "val_known": 0.9770833333333333, "val_cluster": 0.74375, "in_cone_b_u": 0.0, "angle_b_u_deg": 36.89105224609375, "depth_a": 1.5401239582439903, "depth_b": 1.5123856746587812, "depth_full": 1.1608527335149055, "frac_ordered": 0.0029296875, "method": "naive_lowpass", "seed": 1, "train_time_s": 201.8, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7847222222222222, "old": 0.7833333333333333, "new": 0.7854166666666667, "parent_acc": 0.22037037037037038, "novel_to_parent": 0.07569444444444444, "val_known": 0.98125, "val_cluster": 0.8166666666666667, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.33900451660156, "depth_a": 1.078509535558077, "depth_b": 1.8132951862097526, "depth_full": 1.3182577069076866, "frac_ordered": 0.0087890625, "method": "freqcone_sel", "seed": 1, "train_time_s": 215.2, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8564814814814815, "old": 0.8444444444444444, "new": 0.8625, "parent_acc": 0.26435185185185184, "novel_to_parent": 0.2743055555555556, "val_known": 0.98125, "val_cluster": 0.9125, "method": "gcd", "seed": 2, "train_time_s": 78.6, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8587962962962963, "old": 0.8916666666666667, "new": 0.8423611111111111, "parent_acc": 0.2523148148148148, "novel_to_parent": 0.2520833333333333, "val_known": 0.9854166666666667, "val_cluster": 0.88125, "in_cone_b_u": 0.0, "angle_b_u_deg": 63.63658905029297, "depth_a": 1.1921533026382627, "depth_b": 1.2113431937243782, "depth_full": 1.153437305393898, "frac_ordered": 0.2138671875, "method": "hypcd", "seed": 2, "train_time_s": 112.3, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7393518518518518, "old": 0.7694444444444445, "new": 0.7243055555555555, "parent_acc": 0.23333333333333334, "novel_to_parent": 0.32569444444444445, "val_known": 0.9791666666666666, "val_cluster": 0.8625, "in_cone_b_u": 0.0, "angle_b_u_deg": 24.32321548461914, "depth_a": 4.599999861560387, "depth_b": 4.599999861560387, "depth_full": 4.599999853159291, "frac_ordered": 0.521484375, "method": "fourex_partition", "seed": 2, "train_time_s": 213.3, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.4787037037037037, "old": 0.4736111111111111, "new": 0.48125, "parent_acc": 0.9740740740740741, "novel_to_parent": 0.93125, "val_known": 0.93125, "val_cluster": 0.6729166666666667, "in_cone_b_u": 0.0, "angle_b_u_deg": 30.793264389038086, "depth_a": 1.2180771770279966, "depth_b": 1.2671282513667779, "depth_full": 1.0452168073879775, "frac_ordered": 0.0341796875, "method": "naive_lowpass", "seed": 2, "train_time_s": 201.3, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8694444444444445, "old": 0.8097222222222222, "new": 0.8993055555555556, "parent_acc": 0.22592592592592592, "novel_to_parent": 0.13333333333333333, "val_known": 0.9895833333333334, "val_cluster": 0.93125, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.433937072753906, "depth_a": 1.0785095333138692, "depth_b": 1.8132951893626679, "depth_full": 1.2458047171354552, "frac_ordered": 0.0009765625, "method": "freqcone_sel", "seed": 2, "train_time_s": 209.5, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6328703703703704, "old": 0.6305555555555555, "new": 0.6340277777777777, "parent_acc": 0.2513888888888889, "novel_to_parent": 0.2048611111111111, "val_known": 0.9604166666666667, "val_cluster": 0.7729166666666667, "method": "gcd", "seed": 3, "train_time_s": 78.2, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6699074074074074, "old": 0.6138888888888889, "new": 0.6979166666666666, "parent_acc": 0.45, "novel_to_parent": 0.6180555555555556, "val_known": 0.9645833333333333, "val_cluster": 0.81875, "in_cone_b_u": 0.0, "angle_b_u_deg": 18.098735809326172, "depth_a": 4.599999869961483, "depth_b": 4.599999865760935, "depth_full": 4.599999853159291, "frac_ordered": 0.5029296875, "method": "hypcd", "seed": 3, "train_time_s": 113.9, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6907407407407408, "old": 0.7041666666666667, "new": 0.6840277777777778, "parent_acc": 0.3314814814814815, "novel_to_parent": 0.4861111111111111, "val_known": 0.98125, "val_cluster": 0.7625, "in_cone_b_u": 0.0, "angle_b_u_deg": 17.56698226928711, "depth_a": 4.5999998573598395, "depth_b": 4.599999834556866, "depth_full": 4.599999871761717, "frac_ordered": 0.5361328125, "method": "fourex_partition", "seed": 3, "train_time_s": 213.7, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.22777777777777777, "old": 0.19722222222222222, "new": 0.24305555555555555, "parent_acc": 0.8833333333333333, "novel_to_parent": 1.0, "val_known": 0.33541666666666664, "val_cluster": 0.40625, "in_cone_b_u": 0.0, "angle_b_u_deg": 3.509263515472412, "depth_a": 4.599999859160074, "depth_b": 4.599999868161247, "depth_full": 4.599999854959526, "frac_ordered": 0.509765625, "method": "naive_lowpass", "seed": 3, "train_time_s": 201.5, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6402777777777777, "old": 0.6819444444444445, "new": 0.6194444444444445, "parent_acc": 0.45046296296296295, "novel_to_parent": 0.6736111111111112, "val_known": 0.9708333333333333, "val_cluster": 0.7833333333333333, "in_cone_b_u": 0.0302734375, "angle_b_u_deg": 28.270954132080078, "depth_a": 1.0785095352037284, "depth_b": 1.8132951956684977, "depth_full": 4.599999879562734, "frac_ordered": 1.0, "method": "freqcone_sel", "seed": 3, "train_time_s": 216.8, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.837037037037037, "old": 0.8138888888888889, "new": 0.8486111111111111, "parent_acc": 0.22361111111111112, "novel_to_parent": 0.07916666666666666, "val_known": 0.9916666666666667, "val_cluster": 0.8375, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.175167083740234, "depth_a": 1.0785095335501016, "depth_b": 1.8132951882712742, "depth_full": 1.3199137246840944, "frac_ordered": 0.0, "method": "freqcone_w1", "seed": 1, "train_time_s": 216.1, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.861574074074074, "old": 0.775, "new": 0.9048611111111111, "parent_acc": 0.22546296296296298, "novel_to_parent": 0.17152777777777778, "val_known": 0.9875, "val_cluster": 0.8291666666666667, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.53864669799805, "depth_a": 1.0785095340225663, "depth_b": 1.813295191666721, "depth_full": 1.3031917750111357, "frac_ordered": 0.001953125, "method": "freqcone_w1", "seed": 2, "train_time_s": 216.3, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.39675925925925926, "old": 0.4263888888888889, "new": 0.3819444444444444, "parent_acc": 0.8865740740740741, "novel_to_parent": 0.9833333333333333, "val_known": 0.8979166666666667, "val_cluster": 0.5333333333333333, "in_cone_b_u": 0.775390625, "angle_b_u_deg": 12.606149673461914, "depth_a": 1.0785095311877777, "depth_b": 1.813295192273051, "depth_full": 4.599999855559604, "frac_ordered": 1.0, "method": "freqcone_w1", "seed": 3, "train_time_s": 214.4, "w_ent": 1.0}
+DONE
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  for p, t in zip(y_pred, y_true):
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:355: RuntimeWarning: Mean of empty slice
+  for p, t in zip(y_pred, y_true):
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7305555555555555, "old": 0.7791666666666667, "new": 0.70625, "parent_acc": 0.22546296296296298, "novel_to_parent": 0.08819444444444445, "val_known": 0.9833333333333333, "val_cluster": 0.88125, "in_cone_b_u": 0.0, "angle_b_u_deg": 44.95966720581055, "depth_a": 1.0785095326051721, "depth_b": 1.8132951865735505, "depth_full": 1.3172101054903933, "frac_ordered": 0.00390625, "method": "freqcone_w0", "seed": 1, "train_time_s": 229.3, "w_ent": 0.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8893518518518518, "old": 0.7958333333333333, "new": 0.9361111111111111, "parent_acc": 0.22685185185185186, "novel_to_parent": 0.11805555555555555, "val_known": 0.9895833333333334, "val_cluster": 0.8145833333333333, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.36368942260742, "depth_a": 1.0785095327232883, "depth_b": 1.8132951831781037, "depth_full": 1.2550296650538064, "frac_ordered": 0.001953125, "method": "freqcone_w0", "seed": 2, "train_time_s": 219.1, "w_ent": 0.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.6537037037037037, "old": 0.5958333333333333, "new": 0.6826388888888889, "parent_acc": 0.4513888888888889, "novel_to_parent": 0.6527777777777778, "val_known": 0.9791666666666666, "val_cluster": 0.7666666666666667, "in_cone_b_u": 0.013671875, "angle_b_u_deg": 31.21784019470215, "depth_a": 1.0785095342587987, "depth_b": 1.813295191302923, "depth_full": 4.599999851959135, "frac_ordered": 1.0, "method": "freqcone_w0", "seed": 3, "train_time_s": 214.8, "w_ent": 0.0}
+ABLATION_DONE
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.711574074074074, "old": 0.7194444444444444, "new": 0.7076388888888889, "parent_acc": 0.611574074074074, "novel_to_parent": 0.78125, "val_known": 0.9666666666666667, "val_cluster": 0.8041666666666667, "in_cone_b_u": 0.0, "angle_b_u_deg": 17.9375, "depth_a": 4.599999845958353, "depth_b": 4.59999984355804, "depth_full": 4.599999838757414, "frac_ordered": 0.5361328125, "method": "hypcd", "seed": 4, "train_time_s": 117.3, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7467592592592592, "old": 0.7666666666666667, "new": 0.7368055555555556, "parent_acc": 0.2412037037037037, "novel_to_parent": 0.2548611111111111, "val_known": 0.9916666666666667, "val_cluster": 0.9145833333333333, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.351749420166016, "depth_a": 1.0785095333138692, "depth_b": 1.8132951888776039, "depth_full": 1.249738512948933, "frac_ordered": 0.001953125, "method": "freqcone_sel", "seed": 4, "train_time_s": 219.5, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7328703703703704, "old": 0.7013888888888888, "new": 0.7486111111111111, "parent_acc": 0.2671296296296296, "novel_to_parent": 0.2590277777777778, "val_known": 0.9875, "val_cluster": 0.8083333333333333, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.07820129394531, "depth_a": 1.0785095341406827, "depth_b": 1.8132951919092528, "depth_full": 1.2977152779214927, "frac_ordered": 0.0048828125, "method": "freqcone_v3_sel", "seed": 4, "train_time_s": 219.9, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.4393518518518518, "old": 0.35694444444444445, "new": 0.48055555555555557, "parent_acc": 1.0, "novel_to_parent": 0.9951388888888889, "val_known": 0.81875, "val_cluster": 0.5416666666666666, "in_cone_b_u": 0.8310546875, "angle_b_u_deg": 10.074653625488281, "depth_a": 1.078509534258799, "depth_b": 1.81329518899887, "depth_full": 4.599999873561952, "frac_ordered": 1.0, "method": "freqcone_v3_w1", "seed": 4, "train_time_s": 218.7, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7143518518518519, "old": 0.7069444444444445, "new": 0.7180555555555556, "parent_acc": 0.25787037037037036, "novel_to_parent": 0.2826388888888889, "val_known": 0.9833333333333333, "val_cluster": 0.8645833333333334, "in_cone_b_u": 0.0, "angle_b_u_deg": 58.7714958190918, "depth_a": 1.515612948828765, "depth_b": 1.5543772774881761, "depth_full": 1.2869325955602944, "frac_ordered": 0.060546875, "method": "hypcd", "seed": 5, "train_time_s": 112.8, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7643518518518518, "old": 0.7291666666666666, "new": 0.7819444444444444, "parent_acc": 0.2449074074074074, "novel_to_parent": 0.23472222222222222, "val_known": 0.9833333333333333, "val_cluster": 0.8583333333333333, "in_cone_b_u": 0.0, "angle_b_u_deg": 45.31743621826172, "depth_a": 1.0785095310696615, "depth_b": 1.8132951836631677, "depth_full": 1.2845387058143358, "frac_ordered": 0.0, "method": "freqcone_sel", "seed": 5, "train_time_s": 214.3, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.7074074074074074, "old": 0.7138888888888889, "new": 0.7041666666666667, "parent_acc": 0.23981481481481481, "novel_to_parent": 0.26805555555555555, "val_known": 0.9875, "val_cluster": 0.8875, "in_cone_b_u": 0.0, "angle_b_u_deg": 44.64158630371094, "depth_a": 1.078509533195753, "depth_b": 1.8132951866948166, "depth_full": 1.332722742398556, "frac_ordered": 0.001953125, "method": "freqcone_v3_sel", "seed": 5, "train_time_s": 214.6, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.3699074074074074, "old": 0.3347222222222222, "new": 0.3875, "parent_acc": 0.9986111111111111, "novel_to_parent": 0.9909722222222223, "val_known": 0.9041666666666667, "val_cluster": 0.5958333333333333, "in_cone_b_u": 0.802734375, "angle_b_u_deg": 12.466992378234863, "depth_a": 1.0785095347312637, "depth_b": 1.8132951940920403, "depth_full": 4.599999863960699, "frac_ordered": 1.0, "method": "freqcone_v3_w1", "seed": 5, "train_time_s": 215.5, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8458333333333333, "old": 0.7736111111111111, "new": 0.8819444444444444, "parent_acc": 0.23472222222222222, "novel_to_parent": 0.12777777777777777, "val_known": 0.9833333333333333, "val_cluster": 0.8020833333333334, "in_cone_b_u": 0.0009765625, "angle_b_u_deg": 70.7579345703125, "depth_a": 1.0515684929805567, "depth_b": 1.1150795662664432, "depth_full": 1.1636777562586382, "frac_ordered": 0.390625, "method": "hypcd", "seed": 6, "train_time_s": 112.7, "w_ent": 1.0}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8347222222222223, "old": 0.7569444444444444, "new": 0.8736111111111111, "parent_acc": 0.22175925925925927, "novel_to_parent": 0.10694444444444444, "val_known": 0.9916666666666667, "val_cluster": 0.9270833333333334, "in_cone_b_u": 0.0, "angle_b_u_deg": 46.59986877441406, "depth_a": 1.0785095347312634, "depth_b": 1.8132951922730507, "depth_full": 1.277856053181806, "frac_ordered": 0.0, "method": "freqcone_sel", "seed": 6, "train_time_s": 214.5, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.8421296296296297, "old": 0.8902777777777777, "new": 0.8180555555555555, "parent_acc": 0.22407407407407406, "novel_to_parent": 0.12222222222222222, "val_known": 0.99375, "val_cluster": 0.8833333333333333, "in_cone_b_u": 0.0, "angle_b_u_deg": 46.313392639160156, "depth_a": 1.0785095310696615, "depth_b": 1.8132951866948166, "depth_full": 1.3244609028450836, "frac_ordered": 0.00390625, "method": "freqcone_v3_sel", "seed": 6, "train_time_s": 212.2, "w_ent": 0.03}
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+/home/claude/freqcone/toy_experiment.py:360: RuntimeWarning: Mean of empty slice
+  return correct.mean(), correct[old_mask].mean(), correct[~old_mask].mean()
+/usr/local/lib/python3.13/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+{"all": 0.5203703703703704, "old": 0.5416666666666666, "new": 0.5097222222222222, "parent_acc": 0.962037037037037, "novel_to_parent": 0.9375, "val_known": 0.9520833333333333, "val_cluster": 0.5583333333333333, "in_cone_b_u": 0.7451171875, "angle_b_u_deg": 13.332752227783203, "depth_a": 1.0785095317783586, "depth_b": 1.81329518839254, "depth_full": 4.59999984355804, "frac_ordered": 1.0, "method": "freqcone_v3_w1", "seed": 6, "train_time_s": 213.1, "w_ent": 1.0}
+V3_DONE

@@ -1,2 +1,29 @@
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Checkpoints, model weights and datasets: never committed
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+runs/*/ckpt*
+dev_outputs/
+datasets/
+*.tgz
+*.tar.gz
+
+# LaTeX intermediates (the PDF and the generated tables / macros are kept)
+paper/**/*.aux
+paper/**/*.log
+paper/**/*.out
+paper/**/*.toc
+paper/**/*.fls
+paper/**/*.fdb_latexmk
+paper/**/*.synctex.gz
+paper/**/*.bbl
+paper/**/*.blg
+paper/**/*.xdv
+
+# Result files (JSON / JSONL) are evidence and are NOT ignored.
