@@ -499,3 +499,29 @@ def auto_select_c(d):
     R = R ** (1 / float(d))
     c = 1 / (R ** 2)
     return c
+# >>> freqcone: memory-safe dist_matrix, opt-in through --dist_impl lowmem (train/train_HypSelEx.py)
+
+
+def dist_matrix_lowmem(x, y, c=1.0):
+    r"""Same values as :func:`dist_matrix`, without the N x M x D tensor of ``_mobius_addition_batch``.
+
+    For points of the ball, ``||(-x) (+)_c y|| = ||x - y|| * sqrt(den) / den`` with
+    ``den = 1 - 2c<x, y> + c^2 ||x||^2 ||y||^2``. Upstream divides the Mobius sum by ``den + 1e-5``;
+    that term is kept, and so is upstream's ``artanh`` (input clamped to 1 - 1e-5). The Gram matrix
+    and the norms are formed in float64, so memory is O(N M) instead of O(N M D): upstream needs
+    about 2.1 GB per float32 call at N = M = 256, D = 8192, before autograd buffers.
+    The floor under ``||x - y||^2`` keeps the gradient of sqrt finite on the diagonal (x_i = y_i):
+    the contrastive losses mask that entry out but still back-propagate through it.
+    """
+    c = torch.as_tensor(c).type_as(x)
+    sqrt_c = c ** 0.5
+    cd = c.double()
+    xd, yd = x.double(), y.double()
+    xy = xd @ yd.t()
+    x2 = xd.pow(2).sum(-1, keepdim=True)
+    y2 = yd.pow(2).sum(-1, keepdim=True).t()
+    den = 1 - 2 * cd * xy + cd ** 2 * x2 * y2
+    diff = (x2 + y2 - 2 * xy).clamp_min(1e-12).sqrt()
+    norm = (diff * den.clamp_min(1e-12).sqrt() / (den + 1e-5)).to(x.dtype)
+    return 2 / sqrt_c * artanh(sqrt_c * norm)
+# <<< freqcone

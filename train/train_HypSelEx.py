@@ -28,6 +28,20 @@ from config import exp_root, dino_pretrain_path, dinov2_pretrain_path
 
 from kmeans_pytorch import kmeans
 from hyptorch.pmath import dist_matrix
+# >>> freqcone: opt-in O(N^2) distance (--dist_impl lowmem) and FreqCone hooks; inactive by default
+from hyptorch.pmath import dist_matrix_lowmem
+from freqcone.hypcd import FCRun, INERT, add_args as fc_add_args, loader_order as fc_loader_order
+
+DIST_IMPL = 'upstream'
+FC_RUN = INERT
+_dist_matrix_upstream = dist_matrix
+
+
+def dist_matrix(x, y, c=1.0):
+    if DIST_IMPL == 'lowmem':
+        return dist_matrix_lowmem(x, y, c=c)
+    return _dist_matrix_upstream(x, y, c=c)
+# <<< freqcone
 
 warnings.filterwarnings("ignore")
 
@@ -224,6 +238,10 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
     Distance = args.distance
 
     for epoch in range(args.epochs):
+        # >>> freqcone: epoch timer
+        if FC_RUN.enabled:
+            FC_RUN.start_epoch(epoch)
+        # <<< freqcone
         loss_record = AverageMeter()
         train_acc_record = AverageMeter()
 
@@ -372,11 +390,26 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
 
             loss_cons_record.update(loss_in.item(), class_labels.size(0))
             loss = loss_in
+            # >>> freqcone: FreqCone term (--freqcone True), depth / cone monitors, stop on a non-finite loss
+            if FC_RUN.enabled:
+                loss_fc = FC_RUN.step(model, projection_head[0], images, features, class_labels.size(0), epoch, batch_idx)
+                if loss_fc is not None:
+                    loss = loss + loss_fc
+                FC_RUN.check_finite(loss, epoch, batch_idx)
+            # <<< freqcone
             loss_record.update(loss.item(), class_labels.size(0))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # >>> freqcone: --profile_steps N stops after N steps (time and peak-memory probe)
+            if FC_RUN.enabled and FC_RUN.profile_tick(batch_idx):
+                break
+            # <<< freqcone
 
+        # >>> freqcone: end of this epoch's training steps
+        if FC_RUN.enabled:
+            FC_RUN.end_epoch(epoch, loss_record.avg, loss_cons_record.avg, lambda_distance)
+        # <<< freqcone
         print('Epoch: {} Avg Loss: {:.3f} | Constrastive: {:.3f} '.format(epoch, loss_record.avg, loss_cons_record.avg))
 
         Total_loss.append(loss_record.avg)
@@ -425,7 +458,15 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
             best_epoch = epoch
 
         print('Best Train Epochs:  {}'.format(best_epoch))
+        # >>> freqcone: epoch wall time; a --profile_steps run stops after its first epoch
+        if FC_RUN.enabled and FC_RUN.epoch_done(epoch, len(train_loader)):
+            return
+        # <<< freqcone
 
+    # >>> freqcone: last-epoch record written to --results_json (test_last, val, geometry, upstream_best)
+    if FC_RUN.enabled and args.results_json:
+        FC_RUN.final_eval(model, projection_head, merge_train_loader_test, test, best_epoch, best_stats)
+    # <<< freqcone
     print('############# Final Reports #############')
     print('Best Train Accuracies: All {:.4f} | Old {:.4f} | New {:.4f}'.format(best_stats[0], best_stats[1], best_stats[2]))
     print('Best Train Epochs:  {} '.format(best_epoch))
@@ -516,6 +557,10 @@ def extract_labeled_protos(model, train_loader, args):
                                       mode=None, protos=None, cluster_size=cluster_size)
         kmeans_higher.fit_mix(u_feats, l_feats, level_l_targets)
         preds_level = kmeans_higher.labels_
+        # >>> freqcone: --fix_label_order stores level >= 1 labels in loader order (SelEx issue #11)
+        if getattr(args, 'fix_label_order', False):
+            preds_level = fc_loader_order(preds_level, mask_known)
+        # <<< freqcone
         prototypes_level = kmeans_higher.cluster_centers_
         prototype_higher.append(prototypes_level.clone())
         preds_higher.append(preds_level.to(device).clone())
@@ -674,11 +719,17 @@ if __name__ == "__main__":
     parser.add_argument('--riemannian', type=bool, default=False)
     parser.add_argument('--dino', default='v1', type=str)
     parser.add_argument('--hyper_max_weight', default=1.0, type=float)
+    # >>> freqcone: extension flags (defaults reproduce upstream)
+    fc_add_args(parser)
+    # <<< freqcone
     # ----------------------
     # INIT
     # ----------------------
     args = parser.parse_args()
     device = torch.device('cuda:0')
+    # >>> freqcone: distance implementation used by SupConLoss and info_nce_logits
+    DIST_IMPL = args.dist_impl
+    # <<< freqcone
     args = get_class_splits(args)
     set_random_seed(args.seed)
 
@@ -766,6 +817,9 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False, sampler=sampler, drop_last=True)
     test_loader_unlabelled = DataLoader(unlabelled_train_examples_test, num_workers=args.num_workers, batch_size=int(args.batch_size / 2), shuffle=False)
     test_loader_labelled = DataLoader(test_dataset, num_workers=args.num_workers, batch_size=int(args.batch_size / 2), shuffle=False)
+    # >>> freqcone: hooks object (inactive unless --freqcone, --results_json or --profile_steps is set)
+    FC_RUN = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'))
+    # <<< freqcone
 
     # ----------------------
     # PROJECTION HEAD

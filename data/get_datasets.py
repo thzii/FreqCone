@@ -69,6 +69,22 @@ def get_datasets(dataset_name, train_transform, test_transform, args):
                             train_classes=args.train_classes,
                             prop_train_labels=args.prop_train_labels,
                             split_train_val=False)
+    # >>> freqcone: --split_train_val holds out GCD's known-class validation split (20 % of the labelled
+    # images of each class, test transform). The dataset functions reseed numpy, so the labelled /
+    # unlabelled partition is the same as above; the held-out images leave training entirely.
+    if getattr(args, 'split_train_val', False):
+        datasets = get_dataset_f(train_transform=train_transform, test_transform=test_transform,
+                                 train_classes=args.train_classes,
+                                 prop_train_labels=args.prop_train_labels,
+                                 split_train_val=True)
+    # <<< freqcone
+    # >>> freqcone: --smoke_frac k keeps every k-th image of every split (smoke tests only; no random draws)
+    if getattr(args, 'smoke_frac', 0):
+        from freqcone.data_checks import keep_every
+        for key in list(datasets):
+            if datasets[key] is not None:
+                datasets[key] = keep_every(datasets[key], args.smoke_frac, dataset_name)
+    # <<< freqcone
 
     # Set target transforms:
     target_transform_dict = {}
