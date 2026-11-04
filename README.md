@@ -275,6 +275,10 @@ Mặc định của mọi cờ đều tái lập đúng upstream.
 | SelEx | `unsupervised_smoothing` 0.5, `sup_con_weight` 0.35, temperature 1.0 |
 | Augmentation | `imagenet`: resize 256, random crop 224, flip, ColorJitter; 2 view |
 | Split | SSB 98 known / 98 novel, 50 % ảnh known có nhãn |
+| Đánh giá | `eval_funcs v2` (Hungarian, transductive) |
+
+- Các giá trị trên được áp qua mảng `UPSTREAM` trong `scripts/freqcone/hypselex_args.sh`.
+- **Lưu ý về c:** paper HypCD ghi c = 0,05 cho Hyp-SelEx, nhưng dòng Stanford Cars trong `scripts/train_HypSelEx.cmd` của upstream dùng `--c 0.1`. Ở đây theo **script**, vì đó là cấu hình đã chạy ra số công bố. Mọi giá trị δ trong README tính ở c = 0,1.
 
 **FreqCone v2:**
 - λ_dir = 0.5, λ_con = 0.05, τ_a = 0.5, τ_b = 0.3, K = 0.1.
@@ -310,13 +314,36 @@ Mặc định của mọi cờ đều tái lập đúng upstream.
 - Luật 1-SE: bootstrap B = 2000, paired và phân tầng theo lớp, seed 0.
 - Phá hòa: λ_ent nhỏ hơn trước, rồi nón rộng hơn trước.
 
-**Cổng:** chỉ dùng hàng "Epoch cuối".
+**Đánh giá theo chuẩn GCD (theo code HypCD).** Đây là cách các paper GCD (và HypCD) ra số, lặp lại đúng vòng train của upstream (`train/train_HypSelEx.py`, dòng 226–234 và 385–431):
+- **Đầu mỗi epoch:** `extract_labeled_protos` chạy SS-k-means trên tập train (ảnh labelled làm neo) và chấm All / Old / New trên **phần unlabelled** theo v2. Trọng số lúc này là trọng số **sau epoch trước**.
+- **Cuối mỗi epoch:** `test_kmeans` chạy trên **tập test chính thức, rời**. Upstream giữ checkpoint "best" khi Old ở đây **tăng ngặt** (bắt đầu từ 0; hòa thì giữ epoch sớm hơn).
+- **Số báo cáo** là bộ All / Old / New mà upstream in ở dòng `Best Train Accuracies`, tức SS-k-means đầu epoch được chọn.
+- **Ngoại lệ:** ở epoch có `(epoch + 1) % train_report_interval == 0` (với cấu hình này là epoch cuối), upstream thay bộ số đó bằng `test_kmeans` trên tập unlabelled, sau epoch.
+- **Phép đo trước khi train ("epoch 0"):** SS-k-means đầu epoch 1 chạy trên trọng số DINOv2 chưa train. Vì vậy dòng epoch 1 có `weights_after_epoch = 0` và chính là phép đo này; không cần chạy thêm.
+- **Tái dùng:** các hàm `extract_labeled_protos`, `test_kmeans`, `split_cluster_acc_v2` là của upstream, không viết lại. Hook `epoch_done` chỉ ghi lại nguyên văn các bộ số upstream đã tính.
+- **Kiểm tra:** `tests_freqcone/test_gcd_standard.py` chạy chính hàm `train()` của upstream và đối chiếu hàng (1) với dòng `Best Train Accuracies` / `Best Train Epochs` upstream in ra. Test có hai trường hợp: hòa ở Old, và best rơi vào epoch cuối. Bản CUDA của test dùng hàm thật.
+
+**Hai hàng chính** của mỗi run (`freqcone/summarize_run.py`):
+
+| # | Hàng | Cách lấy | Dùng cho |
+| --- | --- | --- | --- |
+| (1) | **Chuẩn GCD (theo code HypCD)** | Như trên | So SOTA, G0 |
+| (2) | **Epoch cuối** | `test()` của upstream (v2, transductive) sau epoch 200 | Kiểm tra độ vững |
+
+- Hàng (1) chọn epoch bằng Old trên tập test rời. Đây là quy tắc của upstream: nó không chọn trên tập được báo cáo, nhưng vẫn là chọn bằng nhãn test. Vì vậy cần thêm hàng (2), không qua bất kỳ phép chọn nào.
+
+**Cổng:** G1 và kết luận cuối phải đạt trên **CẢ HAI** hàng chính; G0 xét trên hàng (1).
 
 | Cổng | Điều kiện đạt |
 | --- | --- |
-| G0 | Hàng "tiêu chí upstream" của R0 (mức A) hoặc `base_s8` (mức B): \|All − 83,8\| ≤ 2,0 (Hyp-SelEx, Stanford Cars, DINOv2: 83,8 / 93,3 / 79,2, Bảng 1 của HypCD) |
-| G1 | ΔNew ≥ +1,0 và ΔAll ≥ −0,5 so với R0 |
-| Kết luận cuối (seed 8–10) | ΔNew trung bình ≥ +1,0; thắng ≥ 2/3 seed về New; ΔAll trung bình ≥ −0,5 |
+| G0 | Hàng (1) của R0 (mức A) hoặc `base_s8` (mức B): \|All − 83,8\| ≤ 2,0 (Hyp-SelEx, Stanford Cars, DINOv2: 83,8 / 93,3 / 79,2, Bảng 1 của HypCD) |
+| G1 | Trên mỗi hàng chính: ΔNew ≥ +1,0 và ΔAll ≥ −0,5 so với R0 |
+| Kết luận cuối (seed 8–10) | Trên mỗi hàng chính: ΔNew trung bình ≥ +1,0; thắng ≥ 2/3 seed về New; ΔAll trung bình ≥ −0,5 |
+
+**So SOTA:**
+- Dùng hàng (1): trung bình ± độ lệch chuẩn trên 3 seed (8–10), kèm số của từng seed.
+- Đặt cạnh số công bố 83,8 / 93,3 / 79,2.
+- **Số công bố của HypCD trên Cars là kết quả của một lần chạy**, không phải trung bình nhiều seed. Bảng của `compare_runs` ghi rõ điều này.
 
 ## 12. Đầu ra của mỗi run
 
@@ -325,7 +352,10 @@ runs/<run_id>/
 ├── run.json            thiết lập, provenance, SHA (DINOv2, danh sách dữ liệu), val epoch cuối, hình học, chi phí. KHÔNG có số test
 ├── epochs_val.jsonl    mỗi epoch: epoch, val_acc, losses, fc{depth_full, in_cone, clip_frac, angle_b_u, depth_b}, lambda_distance, lr, time_s
 │                       (dòng cuối thêm val_per_sample_true / _pred, val_list_sha256)
-├── epochs_test.jsonl   mỗi epoch: epoch, all, old, new (v2, transductive), upstream_disjoint_test{all, old, new}
+├── epochs_test.jsonl   mỗi epoch: epoch,
+│                         gcd{all, old, new, source, weights_after_epoch}   bộ số upstream gắn với epoch (hàng 1)
+│                         disjoint_test{all, old, new}                       test_kmeans trên test rời (chọn epoch hàng 1)
+│                         eval{all, old, new}                                test() v2 sau epoch (hàng 2, oracle)
 ├── train.log           stdout (không có số test khi --hide_test_stdout)
 ├── ckpt_resume.pt      trạng thái sau epoch gần nhất (không commit)
 ├── g0.json             (run baseline dùng cho G0)
@@ -365,16 +395,21 @@ python -m freqcone.compare_runs --base runs/base_s8 runs/base_s9 runs/base_s10 \
     --fc runs/fc_s8 runs/fc_s9 runs/fc_s10 --gate final --plot runs/compare_final.png --out runs/compare_final.json
 ```
 
-**Cách đọc bảng của `summarize_run`:**
+**Cách đọc bảng của `summarize_run`.** Bảng "Kết quả" có ba hàng:
 
 | Hàng | Vai trò |
 | --- | --- |
-| Epoch cuối | **Kết quả chính**; mọi cổng và kết luận đều dùng hàng này |
-| Epoch có val cao nhất | Kết quả phụ, hợp lệ vì chọn bằng val |
-| Tiêu chí upstream (Old cao nhất trên test rời) | Chỉ để đối chiếu số công bố (G0) |
-| Oracle max All / Old / New | Chọn epoch bằng chính test, mỗi chỉ số lấy ở một epoch khác nhau: số bị thổi phồng, chỉ để tham khảo |
+| (1) Chuẩn GCD (theo code HypCD) | **CHÍNH**: so SOTA, G0, G1, kết luận cuối. Cột Epoch là epoch upstream chọn |
+| (2) Epoch cuối | **CHÍNH**: kiểm tra độ vững; G1 và kết luận cuối phải đạt cả ở đây |
+| Epoch có val cao nhất | Phụ, hợp lệ vì chọn bằng val |
 
-`compare_runs` in hàng oracle ở một bảng riêng, có tiêu đề "Oracle (chọn bằng test, tham khảo)".
+- Dưới bảng là một dòng ghi nguồn số của hàng (1): `ss_kmeans_epoch_start` hoặc `test_kmeans_unlabelled`, và trọng số sau epoch nào.
+- Bảng **"Oracle (chọn bằng test, tham khảo …)"** để riêng. Mỗi chỉ số max All / Old / New lấy ở một epoch khác nhau, nên số bị thổi phồng. Không dùng bảng này để so SOTA hay kết luận.
+
+**Cách đọc bảng của `compare_runs`:**
+- **Bảng Δ:** mỗi hàng chính có ΔAll / ΔOld / ΔNew (FreqCone − nền, điểm %), TB ± SD và số seed thắng về New. Cổng ghi đạt/không đạt cho từng hàng chính; chỉ đạt khi cả hai hàng đạt.
+- **Bảng SOTA:** hàng (1) của mỗi nhánh, TB ± SD và từng seed, cạnh số công bố (một lần chạy).
+- **Bảng oracle:** để riêng, chỉ tham khảo.
 
 ## 15. Tiếp tục khi bị ngắt, và chạy lại
 

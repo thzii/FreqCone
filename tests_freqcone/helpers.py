@@ -103,19 +103,22 @@ def train_loop(fc, epochs, seed=0, stop_after=None):
             opt.step()
         fc.end_epoch(epoch, float(loss), float(loss), 0.0)
         sched.step()
-        fc.epoch_done(epoch, len(loader), model, head, merged, noisy_test, (0.5, 0.6, 0.4), opt, sched)
+        fc.epoch_done(epoch, len(loader), model, head, merged, noisy_test, (0.5, 0.6, 0.4), opt, sched,
+                      gcd_used=(0.55, 0.65, 0.45))
         if stop_after is not None and epoch + 1 == stop_after:
             return model, head, merged
     return model, head, merged
 
 
 def write_run(root, run_id, seed, enable, curves, val_acc=None, w_ent=0.03, aperture='A1', variant='v2',
-              val=None, epochs=None, upstream_old=None):
+              val=None, epochs=None, disjoint_old=None, gcd=None):
     """A synthetic run directory: run.json (no test numbers) and the two JSONL files.
-    curves: dict all/old/new -> list per epoch (fractions)."""
+    curves: all/old/new per epoch of the per-epoch evaluation (`eval`, fractions); gcd: same layout for upstream's
+    training-set numbers (default: curves); disjoint_old: Old on the disjoint test split (default: curves['old'])."""
     d = os.path.join(root, run_id)
     os.makedirs(d, exist_ok=True)
     n = len(curves['all']) if epochs is None else epochs
+    gcd = gcd or curves
     rec = {'schema': SCHEMA, 'run_id': run_id, 'seed': seed, 'dataset': 'scars', 'base_method': 'Hyp-SelEx',
            'c': 0.1, 'r': 2.0, 'epochs': n, 'fix_label_order': True, 'split_train_val': True,
            'freqcone': {'enable': enable, 'variant': variant if enable else None, 'w_ent': w_ent, 'aperture': aperture},
@@ -124,9 +127,13 @@ def write_run(root, run_id, seed, enable, curves, val_acc=None, w_ent=0.03, aper
         json.dump(rec, f)
     with open(os.path.join(d, 'epochs_test.jsonl'), 'w') as f:
         for e in range(n):
-            up = upstream_old[e] if upstream_old else curves['old'][e]
-            f.write(json.dumps({'epoch': e + 1, 'all': curves['all'][e], 'old': curves['old'][e], 'new': curves['new'][e],
-                                'upstream_disjoint_test': {'all': 0.5, 'old': up, 'new': 0.5}}) + '\n')
+            dold = disjoint_old[e] if disjoint_old else curves['old'][e]
+            f.write(json.dumps({'epoch': e + 1,
+                                'gcd': {'all': gcd['all'][e], 'old': gcd['old'][e], 'new': gcd['new'][e],
+                                        'source': 'ss_kmeans_epoch_start', 'weights_after_epoch': e},
+                                'disjoint_test': {'all': 0.5, 'old': dold, 'new': 0.5},
+                                'eval': {'all': curves['all'][e], 'old': curves['old'][e], 'new': curves['new'][e]}})
+                    + '\n')
     with open(os.path.join(d, 'epochs_val.jsonl'), 'w') as f:
         for e in range(n):
             f.write(json.dumps({'epoch': e + 1, 'val_acc': val_acc[e] if val_acc else None}) + '\n')

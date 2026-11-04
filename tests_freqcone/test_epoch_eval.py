@@ -50,7 +50,9 @@ def test_records_keep_test_numbers_out_of_run_json(tmp_path):
     tests = [json.loads(l) for l in (tmp_path / 'R1' / 'epochs_test.jsonl').read_text().splitlines()]
     vals = [json.loads(l) for l in (tmp_path / 'R1' / 'epochs_val.jsonl').read_text().splitlines()]
     assert [t['epoch'] for t in tests] == [1, 2] == [v['epoch'] for v in vals]
-    assert {'all', 'old', 'new', 'upstream_disjoint_test'} <= set(tests[0])
+    assert set(tests[0]) == {'epoch', 'gcd', 'disjoint_test', 'eval'}
+    assert tests[0]['gcd']['source'] == 'ss_kmeans_epoch_start' and tests[0]['gcd']['weights_after_epoch'] == 0
+    assert all(set(t['eval']) == {'all', 'old', 'new'} for t in tests)
     assert not any(k in json.dumps(vals) for k in ('"all"', '"old"', '"new"'))
     assert vals[-1]['fc']['depth_b'] == pytest.approx(1.282, abs=1e-3) and vals[-1]['fc']['in_cone'] is not None
     assert check_run_dir(str(tmp_path / 'R1')) == []

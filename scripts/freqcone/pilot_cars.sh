@@ -9,7 +9,7 @@
 # FREQCONE     v2, lambda_dir 0.5, lambda_con 0.05, tau_a 0.5, tau_b 0.3, K 0.1; cut-offs from cutoffs.json (scars);
 #              coarse resolution from runs/profile_scars/decision.json.
 # EVALUATION   validation and test after every epoch (isolated random state); test numbers only in
-#              runs/<id>/epochs_test.jsonl. Gates and conclusions use the LAST EPOCH only.
+#              runs/<id>/epochs_test.jsonl. Gates and conclusions use the two main rows (GCD standard, last epoch).
 #
 # LEVEL A (decision.json level A: one run <= 10 GPU-hours)
 #   pilot, seed 7:  R0 baseline;  R1 FreqCone lambda_ent 0.03, A1;  R2 lambda 0.1, A1;  R3 lambda 0.1, A3
@@ -19,16 +19,16 @@
 # CONDITIONAL      R0-repro: upstream as is (label-order bug kept, no validation split), upstream's default seed 1,
 #                  only if G0 fails.
 #
-# G0      The "upstream rule" row (epoch with the highest Old accuracy on the disjoint test split) of R0 (level A) or
+# G0      Row (1) "GCD standard" (upstream's best-checkpoint rule: Old on the disjoint test split) of R0 (level A) or
 #         base_s8 (level B): |All - 83.8| <= 2.0 (Hyp-SelEx, Stanford Cars, DINOv2: 83.8 / 93.3 / 79.2, HypCD
 #         Table 1). Fail -> run R0-repro: if it passes, record that the gap comes from the bug fix and go on; if it
 #         also fails, stop and report.
 # SELECT  (level A) freqcone/select_pilot.py on R1-R3: validation metric at the last epoch, 1-SE rule with a paired,
 #         class-stratified bootstrap (B = 2000, seed 0); ties go to the smaller lambda_ent, then the wider cone.
 #         selection.json is committed before any test number of R1-R3 is read.
-# G1      (level A) selected run vs R0, last epoch: dNew >= +1.0 and dAll >= -0.5. Fail -> stop the accuracy branch
+# G1      (level A) selected run vs R0, on BOTH main rows (GCD standard and last epoch): dNew >= +1.0, dAll >= -0.5. Fail -> stop the accuracy branch
 #         and report (branch B of the earlier plan is then the option to discuss).
-# FINAL   seeds 8-10, last epoch: FreqCone contributes on Stanford Cars if mean dNew >= +1.0, it wins on New for at
+# FINAL   seeds 8-10, on BOTH main rows: FreqCone contributes on Stanford Cars if mean dNew >= +1.0, it wins on New for at
 #         least 2 of 3 seeds, and mean dAll >= -0.5. A negative result is reported in full.
 #
 # TROUBLESHOOTING (no configuration change on our own): a non-finite loss stops the run (report it); out of memory

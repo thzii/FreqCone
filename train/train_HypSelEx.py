@@ -463,7 +463,8 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
         # >>> freqcone: per-epoch evaluation (isolated random state), records, resume state; a profile run stops here
         if FC_RUN.enabled and FC_RUN.epoch_done(epoch, len(train_loader), model, projection_head, merge_train_loader_test,
                                                 test, (all_acc_test, old_acc_test, new_acc_test), optimizer,
-                                                exp_lr_scheduler):
+                                                exp_lr_scheduler, (all_acc, old_acc, new_acc),
+                                                (epoch + 1) % train_report_interval == 0):
             return
         # <<< freqcone
 

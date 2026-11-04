@@ -61,7 +61,7 @@ def test_readme_section_is_replaced(tmp_path):
 def g0_run(root, run_id='R0', all_at_up=0.830, enable=False, **over):
     d = write_run(root, run_id, over.pop('seed', 7), enable,
                   {'all': [0.70, all_at_up, 0.80], 'old': [0.9, 0.93, 0.92], 'new': [0.6, 0.78, 0.74]},
-                  val_acc=[0.5, 0.6, 0.7], upstream_old=[0.80, 0.95, 0.90])
+                  val_acc=[0.5, 0.6, 0.7], disjoint_old=[0.80, 0.95, 0.90])
     rec = json.loads(open(os.path.join(d, 'run.json')).read())
     rec.update(over)
     with open(os.path.join(d, 'run.json'), 'w') as f:
@@ -70,11 +70,11 @@ def g0_run(root, run_id='R0', all_at_up=0.830, enable=False, **over):
 
 
 def test_g0(tmp_path):
-    assert pt.g0(g0_run(tmp_path / 'a', all_at_up=0.830))['passed']          # epoch 2 (upstream rule): 83.0 vs 83.8
+    assert pt.g0(g0_run(tmp_path / 'a', all_at_up=0.830))['passed']          # row (1), epoch 2 (upstream rule): 83.0 vs 83.8
     assert pt.g0(g0_run(tmp_path / 'b', all_at_up=0.858))['passed']
     assert not pt.g0(g0_run(tmp_path / 'c', all_at_up=0.817))['passed']      # -2.1
     out = pt.g0(g0_run(tmp_path / 'd', all_at_up=0.836))
-    assert out['upstream_row']['epoch'] == 2 and out['last_row']['epoch'] == 3
+    assert out['gcd_row']['epoch'] == 2 and out['last_row']['epoch'] == 3
     assert not pt.g0(g0_run(tmp_path / 'e', enable=True))['passed']         # G0 is about the baseline
     assert not pt.g0(g0_run(tmp_path / 'f', c=0.05, r=2.3))['passed']
     repro = g0_run(tmp_path / 'g', run_id='R0-repro', fix_label_order=False, split_train_val=False, seed=1)

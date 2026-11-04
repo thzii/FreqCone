@@ -121,7 +121,7 @@ def test_final_record_with_validation(tmp_path):
     loader = DataLoader(MergedTest(images[30:54], torch.arange(24) % 6,
                                    TensorDataset(images[:30], torch.arange(30) % 3)), batch_size=6)
     run.epoch_done(0, 10, model, projection_head, loader, lambda m, l, a: {'all_acc': .5, 'old_acc': .6, 'new_acc': .4},
-                   (0.5, 0.6, 0.4))
+                   (0.5, 0.6, 0.4), gcd_used=(0.55, 0.65, 0.45))
     run.final_eval(model, projection_head, loader, lambda m, l, a: {'all_acc': .5, 'old_acc': .6, 'new_acc': .4})
     rec = json.loads((tmp_path / 'R1' / 'run.json').read_text())
     assert check_run_dir(str(tmp_path / 'R1')) == []
@@ -133,7 +133,10 @@ def test_final_record_with_validation(tmp_path):
     fc = rec['freqcone']
     assert fc['aperture'] == 'A1' and abs(fc['psi_a'] - 55.2) < 0.2 and abs(fc['depth_b'] - 1.282) < 1e-3
     test_line = json.loads((tmp_path / 'R1' / 'epochs_test.jsonl').read_text().splitlines()[-1])
-    assert test_line == {'epoch': 1, 'all': 0.5, 'old': 0.6, 'new': 0.4, 'upstream_disjoint_test': None}
+    assert test_line == {'epoch': 1, 'disjoint_test': {'all': 0.5, 'old': 0.6, 'new': 0.4},
+                         'gcd': {'all': 0.55, 'old': 0.65, 'new': 0.45, 'source': 'ss_kmeans_epoch_start',
+                                 'weights_after_epoch': 0},
+                         'eval': {'all': 0.5, 'old': 0.6, 'new': 0.4}}
 
 
 @needs_cuda

@@ -1,4 +1,4 @@
-"""Plan 2.2-2.3: one run's table (main, secondary, upstream, oracle rows) and the paired comparison with gates."""
+"""Plan 2.2-2.3: one run's table (two main rows, secondary row, oracle rows) and the paired comparison with gates."""
 import json
 import os
 import subprocess
@@ -19,15 +19,16 @@ def curves(all_, old, new):
 def test_rows_pick_the_right_epochs(tmp_path):
     d = write_run(tmp_path, 'R0', 7, False,
                   curves([.70, .80, .78, .79], [.90, .88, .95, .93], [.60, .75, .70, .72]),
-                  val_acc=[.5, .7, .7, .6], upstream_old=[.10, .30, .30, .20])
+                  val_acc=[.5, .7, .7, .6], disjoint_old=[.10, .30, .30, .20])
     out, md = sr.summarize(d)
     rows = {r['key']: r for r in out['rows']}
     assert rows['last']['epoch'] == 4 and rows['last']['all'] == .79
     assert rows['best_val']['epoch'] == 3                     # tie on validation: the later epoch
-    assert rows['upstream']['epoch'] == 2                     # tie on upstream Old: the first epoch (strict '>')
+    assert rows['gcd']['epoch'] == 2 and rows['gcd']['all'] == .80   # tie on disjoint-test Old: the first epoch (strict '>')
+    assert rows['gcd']['source'] == 'ss_kmeans_epoch_start' and rows['gcd']['weights_after_epoch'] == 1
     assert (rows['oracle_all']['epoch'], rows['oracle_old']['epoch'], rows['oracle_new']['epoch']) == (2, 3, 2)
     assert all(rows[k]['oracle'] for k in ('oracle_all', 'oracle_old', 'oracle_new')) and not rows['last']['oracle']
-    assert 'KẾT QUẢ CHÍNH' in md and 'thổi phồng' in md
+    assert 'Chuẩn GCD (theo code HypCD)' in md and 'Epoch cuối' in md and 'Oracle (chọn bằng test' in md
 
 
 def git(repo, *args):
@@ -58,7 +59,7 @@ def test_candidates_are_locked_until_the_selection_is_committed(repo, monkeypatc
         runs_mod.load_run(d, with_test=True, repo=str(repo))
     git(repo, 'add', 'runs/selection.json')
     git(repo, 'commit', '-q', '-m', 'lock')
-    assert runs_mod.load_run(d, with_test=True, repo=str(repo))['test'][0]['all'] == .8
+    assert runs_mod.load_run(d, with_test=True, repo=str(repo))['test'][0]['eval']['all'] == .8
     (runs / 'R1' / 'run.json').write_text(json.dumps({**json.loads((runs / 'R1' / 'run.json').read_text()), 'x': 1}))
     with pytest.raises(LockError, match='changed after the selection'):
         check_locked(str(runs / 'selection.json'), str(repo))

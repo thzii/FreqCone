@@ -63,18 +63,21 @@ def check_run_dir(run_dir, profile=False):
     if not os.path.exists(paths['test']):
         return errs + ['missing epochs_test.jsonl']
     tests = read_jsonl(paths['test'])
+    want = list(range(1, int(rec['epochs']) + 1))
+    if [t['epoch'] for t in tests] != want:
+        errs.append(f'epochs_test.jsonl does not cover epochs 1..{rec["epochs"]} exactly once')
+    triple = lambda x: isinstance(x, dict) and {'all', 'old', 'new'} <= set(x)
+    if not all(triple(t.get('gcd')) and triple(t.get('disjoint_test')) for t in tests):
+        errs.append('epochs_test.jsonl lines lack gcd{all,old,new} / disjoint_test{all,old,new}')
+    if tests and not triple(tests[-1].get('eval')):
+        errs.append('the last epochs_test.jsonl line lacks the last-epoch evaluation (eval)')
     if rec.get('eval_every_epoch'):
         vals = read_jsonl(paths['val']) if os.path.exists(paths['val']) else []
-        want = list(range(1, int(rec['epochs']) + 1))
-        if [t['epoch'] for t in tests] != want or [v['epoch'] for v in vals] != want:
-            errs.append(f'per-epoch records do not cover epochs 1..{rec["epochs"]} exactly once')
+        if [v['epoch'] for v in vals] != want or not all(triple(t.get('eval')) for t in tests):
+            errs.append(f'per-epoch evaluation does not cover epochs 1..{rec["epochs"]} exactly once')
         errs += [f'epochs_val.jsonl missing {k}' for k in REQUIRED_VAL_LINE if vals and k not in vals[-1]]
         if rec.get('split_train_val') and vals and 'val_per_sample_pred' not in vals[-1]:
             errs.append('last epochs_val.jsonl line lacks the per-image predictions')
-        if tests and not {'all', 'old', 'new', 'upstream_disjoint_test'} <= set(tests[-1]):
-            errs.append('epochs_test.jsonl lines lack all / old / new / upstream_disjoint_test')
-    elif len(tests) != 1:
-        errs.append('without --eval_every_epoch, epochs_test.jsonl must hold the last epoch only')
     diag = rec.get('diagnostics') or []
     if not diag:
         errs.append('no step diagnostics recorded')
@@ -184,12 +187,12 @@ def g0(run_dir):
         problems.append('R0-repro must be upstream as is: label-order bug kept, no validation split, seed 1')
     rows = {r['key']: r for r in table(read_jsonl(os.path.join(run_dir, 'epochs_val.jsonl')),
                                        read_jsonl(os.path.join(run_dir, 'epochs_test.jsonl')))}
-    up, last = rows['upstream'], rows['last']
+    up, last = rows['gcd'], rows['last']
     pub = PUBLISHED.get((rec.get('base_method'), rec.get('dataset')))
     out = {'run_id': rec.get('run_id'), 'base_method': rec.get('base_method'), 'dataset': rec.get('dataset'),
-           'published': pub, 'upstream_row': up, 'last_row': last, 'tolerance': G0_TOL, 'problems': problems}
+           'published': pub, 'gcd_row': up, 'last_row': last, 'tolerance': G0_TOL, 'problems': problems}
     if pub is None or up['all'] is None:
-        problems.append('no published reference, or no per-epoch upstream_disjoint_test records')
+        problems.append('no published reference, or no per-epoch gcd / disjoint_test records')
         out.update(delta_all=None, passed=False)
     else:
         delta = 100 * up['all'] - pub['all']
@@ -289,9 +292,9 @@ def main(argv=None):
         out = g0(a.run_dir)
         with open(os.path.join(a.run_dir, 'g0.json'), 'w') as f:
             json.dump(out, f, indent=1)
-        up, last, pub = out['upstream_row'], out['last_row'], out['published'] or {}
+        up, last, pub = out['gcd_row'], out['last_row'], out['published'] or {}
         pct = lambda x: '-' if x is None else f'{100 * x:.2f}'
-        print(f"G0 {out['base_method']} / {out['dataset']} ({out['run_id']}): upstream rule (epoch {up['epoch']}) All "
+        print(f"G0 {out['base_method']} / {out['dataset']} ({out['run_id']}): GCD standard row (epoch {up['epoch']}) All "
               f"{pct(up['all'])} / Old {pct(up['old'])} / New {pct(up['new'])} vs published {pub.get('all')} / "
               f"{pub.get('old')} / {pub.get('new')}; delta All "
               f"{'-' if out['delta_all'] is None else round(out['delta_all'], 2)} (tolerance ±{G0_TOL}); last epoch "

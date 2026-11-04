@@ -11,8 +11,15 @@ Outputs of a run (--run_dir runs/<run_id>):
   run.json            setting, provenance, checksums, validation result of the last epoch, geometry, cost.
                       It holds no test number.
   epochs_val.jsonl    one line per epoch: validation accuracy, losses, FreqCone diagnostics, lr, time
-  epochs_test.jsonl   one line per epoch: All / Old / New (v2, transductive) and upstream's disjoint-test
-                      accuracies. Test numbers live only here; nothing prints them with --hide_test_stdout.
+  epochs_test.jsonl   one line per epoch (test numbers live only here; nothing prints them with --hide_test_stdout):
+                        gcd            the All / Old / New upstream itself pairs with this epoch (SS-k-means on the
+                                       training set at the start of the epoch, or test_kmeans on the unlabelled set
+                                       at a report epoch), with 'source' and 'weights_after_epoch';
+                        disjoint_test  upstream's test_kmeans on the official test split after the epoch (upstream
+                                       keeps its best checkpoint when Old here improves);
+                        eval           upstream's test() (v2, transductive) after the epoch, isolated random state:
+                                       every epoch with --eval_every_epoch, otherwise the last epoch only.
+                      freqcone/summarize_run.py turns these into the two main rows ("GCD standard", "last epoch").
   ckpt_resume.pt      state after the last finished epoch (--resume continues from it); not committed
 
 The per-epoch evaluation runs with every random generator saved and restored around it (isolated_rng), so a
@@ -397,10 +404,18 @@ class FCRun:
                   f'cannot be satisfied (Lemma 3). This is a result to report, not an error.')
 
     def epoch_done(self, epoch, steps_per_epoch, model, projection_head, loader, test_fn, disjoint_test,
-                   optimizer=None, scheduler=None):
-        """End of an epoch (after upstream's own evaluation and checkpoints): per-epoch evaluation, records, resume
-        state. Returns True when a --profile_steps run must stop here."""
+                   optimizer=None, scheduler=None, gcd_used=None, gcd_from_test_kmeans=False):
+        """End of an epoch (after upstream's own evaluation and checkpoints): records, per-epoch evaluation, resume
+        state. Returns True when a --profile_steps run must stop here.
+
+        gcd_used / disjoint_test: the two accuracy triples upstream itself computes this epoch (train loop,
+        upstream l. 386-392): (all_acc, old_acc, new_acc), i.e. SS-k-means on the training set at the START of the
+        epoch (weights after the previous epoch), or test_kmeans on the unlabelled set after the epoch when
+        (epoch + 1) % train_report_interval == 0; and test_kmeans on the disjoint test split after the epoch. They
+        are recorded verbatim, so the "GCD standard" row reproduces upstream's "Best Train Accuracies".
+        """
         args = self.args
+        m = val = None
         if args.eval_every_epoch and self.run_dir:
             t0 = time.time()
             with isolated_rng(args.seed * 1000 + epoch + 1):
@@ -408,11 +423,18 @@ class FCRun:
                 val = self.val_metric(model, loader.dataset.labelled_dataset, args.seed * 1000 + epoch + 1) \
                     if self.split is not None else None
             self.eval_times.append(time.time() - t0)
-            if not self.profiling:                         # a probe measures the evaluation time, records nothing
-                self._append(self.paths['test'], {
-                    'epoch': epoch + 1, 'all': float(m['all_acc']), 'old': float(m['old_acc']),
-                    'new': float(m['new_acc']),
-                    'upstream_disjoint_test': dict(zip(('all', 'old', 'new'), (float(x) for x in disjoint_test)))})
+        if self.run_dir and not self.profiling:            # a probe measures the evaluation time, records nothing
+            line = {'epoch': epoch + 1,
+                    'disjoint_test': dict(zip(('all', 'old', 'new'), (float(x) for x in disjoint_test))),
+                    'gcd': None, 'eval': None}
+            if gcd_used is not None:
+                line['gcd'] = {**dict(zip(('all', 'old', 'new'), (float(x) for x in gcd_used))),
+                               'source': 'test_kmeans_unlabelled' if gcd_from_test_kmeans else 'ss_kmeans_epoch_start',
+                               'weights_after_epoch': epoch + 1 if gcd_from_test_kmeans else epoch}
+            if m is not None:
+                line['eval'] = {'all': float(m['all_acc']), 'old': float(m['old_acc']), 'new': float(m['new_acc'])}
+            self._append(self.paths['test'], line)
+            if args.eval_every_epoch:
                 self._append(self.paths['val'], self._val_line(epoch, val, optimizer))
         wall = time.time() - self._t_epoch
         self.epoch_times.append(wall)
@@ -581,9 +603,15 @@ class FCRun:
                 if self.split is not None:
                     self.last_val = self.val_metric(model, merge_train_loader_test.dataset.labelled_dataset,
                                                     args.seed * 1000 + args.epochs)
-            self._append(self.paths['test'], {'epoch': int(args.epochs), 'all': float(m['all_acc']),
-                                              'old': float(m['old_acc']), 'new': float(m['new_acc']),
-                                              'upstream_disjoint_test': None})
+            last = {'all': float(m['all_acc']), 'old': float(m['old_acc']), 'new': float(m['new_acc'])}
+            with open(self.paths['test']) if os.path.exists(self.paths['test']) else open(os.devnull) as f:
+                lines = [json.loads(l) for l in f if l.strip()]
+            if lines and lines[-1]['epoch'] == int(args.epochs):
+                lines[-1]['eval'] = last                  # the last epoch's line gains the final evaluation
+            else:
+                lines.append({'epoch': int(args.epochs), 'disjoint_test': None, 'gcd': None, 'eval': last})
+            with open(self.paths['test'], 'w') as f:
+                f.writelines(json.dumps(l) + '\n' for l in lines)
         out = self._skeleton()
         out['val'] = self.last_val
         out['geometry_final'] = self.geometry(model, projection_head, merge_train_loader_test)

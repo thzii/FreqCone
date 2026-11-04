@@ -1,12 +1,13 @@
-"""Baseline against FreqCone, paired by seed (plan, section 2.3), from the JSONL files only.
+"""Baseline against FreqCone, paired by seed, from the JSONL files only.
 
-For every row of summarize_run (last, best_val, upstream, three oracle rows): per-seed differences
-FreqCone - baseline of All / Old / New (points), their mean, standard deviation and the number of seeds won.
-Gates and conclusions use ONLY the last-epoch row:
-  --gate g1     one seed (pilot): pass if dNew >= +1.0 and dAll >= -0.5
-  --gate final  seeds 8-10: pass if mean dNew >= +1.0, wins on New >= 2/3 of the seeds, mean dAll >= -0.5
-The oracle rows are printed in a separate table titled "Oracle (chọn bằng test, tham khảo)".
---plot draws All / Old / New per epoch (mean over seeds, band = min-max) for both arms.
+For every row of summarize_run: per-seed differences FreqCone - baseline of All / Old / New (points), their mean,
+standard deviation and the number of seeds won. Gates and conclusions must pass on BOTH main rows
+("Chuẩn GCD (theo code HypCD)" and "Epoch cuối"):
+  --gate g1     one seed (pilot): dNew >= +1.0 and dAll >= -0.5, on each main row
+  --gate final  seeds 8-10: mean dNew >= +1.0, wins on New >= 2/3 of the seeds, mean dAll >= -0.5, on each main row
+SOTA table: row (1) of each arm, mean ± std over the seeds and every seed, next to HypCD's published Hyp-SelEx
+numbers (one published run). The oracle rows are printed in a separate table titled
+"Oracle (chọn bằng test, tham khảo)". --plot draws the last-epoch-style evaluation (`eval`) per epoch.
 
 usage: python -m freqcone.compare_runs --base runs/base_s8 runs/base_s9 runs/base_s10 \
            --fc runs/fc_s8 runs/fc_s9 runs/fc_s10 --gate final --plot runs/compare_final.png --out runs/compare_final.json
@@ -19,10 +20,12 @@ import sys
 import numpy as np
 
 from freqcone.runs import LockError, load_run, utf8_stdout
-from freqcone.summarize_run import ORACLE, ROWS, table
+from freqcone.summarize_run import MAIN, ORACLE, ROWS, table
 
 G1_NEW, G1_ALL = 1.0, -0.5
 FINAL_NEW, FINAL_ALL, FINAL_WIN_SHARE = 1.0, -0.5, 2 / 3
+PUBLISHED = {'scars': {'all': 83.8, 'old': 93.3, 'new': 79.2},     # HypCD Table 1, Hyp-SelEx, DINOv2, one run
+             'cub': {'all': 90.7, 'old': 85.3, 'new': 93.4}}
 SERIES = {'base': ('Baseline (Hyp-SelEx)', '#2a78d6'), 'fc': ('FreqCone', '#eb6834')}   # categorical slots 1, 2
 SURFACE, INK, INK_2, GRID = '#fcfcfb', '#0b0b0b', '#52514e', '#e4e3df'
 
@@ -57,26 +60,35 @@ def deltas(pairs):
             stats[m] = {'mean': float(d.mean()) if d.size else None,
                         'std': float(d.std(ddof=1)) if d.size > 1 else None,
                         'wins': int((d > 0).sum()), 'n': int(d.size)}
-        out[key] = {'label': label, 'role': role, 'oracle': key in ORACLE, 'per_seed': per_seed, 'stats': stats}
+            for arm in ('base', 'fc'):
+                v = np.array([p[f'{arm}_{m}'] for p in per_seed])
+                stats[f'{arm}_{m}'] = {'mean': float(v.mean()) if v.size else None,
+                                       'std': float(v.std(ddof=1)) if v.size > 1 else None}
+        out[key] = {'label': label, 'role': role, 'oracle': key in ORACLE, 'main': key in MAIN,
+                    'per_seed': per_seed, 'stats': stats}
     return out
 
 
-def gate(d, kind):
-    last = d['last']['stats']
+def _row_pass(st, kind):
+    if st['new']['n'] == 0:
+        return False
     if kind == 'g1':
-        if last['new']['n'] != 1:
-            raise ValueError('G1 compares one pilot pair')
-        ok = last['new']['mean'] >= G1_NEW and last['all']['mean'] >= G1_ALL
-        rule = f'dNew >= +{G1_NEW} and dAll >= {G1_ALL} at the last epoch'
-    else:
-        n = last['new']['n']
-        need = math.ceil(FINAL_WIN_SHARE * n - 1e-9)
-        ok = last['new']['mean'] >= FINAL_NEW and last['new']['wins'] >= need and last['all']['mean'] >= FINAL_ALL
-        rule = (f'mean dNew >= +{FINAL_NEW}, wins on New >= {need}/{n}, mean dAll >= {FINAL_ALL} at the last epoch')
-    return {'gate': kind, 'rule': rule, 'pass': bool(ok), 'last_epoch': last}
+        return st['new']['mean'] >= G1_NEW and st['all']['mean'] >= G1_ALL
+    need = math.ceil(FINAL_WIN_SHARE * st['new']['n'] - 1e-9)
+    return st['new']['mean'] >= FINAL_NEW and st['new']['wins'] >= need and st['all']['mean'] >= FINAL_ALL
 
 
-def markdown(d, g=None):
+def gate(d, kind):
+    if kind == 'g1' and any(d[k]['stats']['new']['n'] != 1 for k in MAIN):
+        raise ValueError('G1 compares one pilot pair')
+    rule = (f'dNew >= +{G1_NEW} and dAll >= {G1_ALL}' if kind == 'g1' else
+            f'mean dNew >= +{FINAL_NEW}, wins on New >= 2/3 of the seeds, mean dAll >= {FINAL_ALL}')
+    per_row = {k: bool(_row_pass(d[k]['stats'], kind)) for k in MAIN}
+    return {'gate': kind, 'rule': rule + ', on both main rows', 'per_row': per_row, 'pass': all(per_row.values()),
+            'rows': {k: d[k]['stats'] for k in MAIN}}
+
+
+def markdown(d, g=None, dataset='scars'):
     f = lambda x: '-' if x is None else f'{x:+.2f}'
     s = lambda x: '-' if x is None else f'{x:.2f}'
 
@@ -89,17 +101,34 @@ def markdown(d, g=None):
                          f"{f(st['old']['mean'])} ± {s(st['old']['std'])} | {f(st['new']['mean'])} ± {s(st['new']['std'])} | "
                          f"{st['new']['wins']}/{st['new']['n']} | {st['new']['n']} |")
         return lines
-    main_keys = [k for k, _, _ in ROWS if k not in ORACLE]
-    lines = block(main_keys, 'FreqCone − baseline theo cặp seed (điểm %)') + ['']
-    lines += ['Theo từng seed, hàng "Epoch cuối":', '', '| Seed | Base All/Old/New | FreqCone All/Old/New | ΔAll | ΔOld | ΔNew |',
-              '| --- | --- | --- | --- | --- | --- |']
-    for p in d['last']['per_seed']:
-        lines.append(f"| {p['seed']} | {p['base_all']:.2f} / {p['base_old']:.2f} / {p['base_new']:.2f} | "
-                     f"{p['fc_all']:.2f} / {p['fc_old']:.2f} / {p['fc_new']:.2f} | {p['all']:+.2f} | {p['old']:+.2f} | "
-                     f"{p['new']:+.2f} |")
+    lines = block(list(MAIN) + ['best_val'], 'FreqCone − baseline theo cặp seed (điểm %)') + ['']
+    for k in MAIN:
+        lines += [f"Theo từng seed, hàng \"{d[k]['label']}\":", '',
+                  '| Seed | Epoch base / FreqCone | Base All/Old/New | FreqCone All/Old/New | ΔAll | ΔOld | ΔNew |',
+                  '| --- | --- | --- | --- | --- | --- | --- |']
+        for p in d[k]['per_seed']:
+            lines.append(f"| {p['seed']} | {p['epoch_base']} / {p['epoch_fc']} | {p['base_all']:.2f} / {p['base_old']:.2f} / "
+                         f"{p['base_new']:.2f} | {p['fc_all']:.2f} / {p['fc_old']:.2f} / {p['fc_new']:.2f} | "
+                         f"{p['all']:+.2f} | {p['old']:+.2f} | {p['new']:+.2f} |")
+        lines.append('')
+    st = d['gcd']['stats']
+    pub = PUBLISHED.get(dataset)
+    lines += ['### So với số công bố (hàng "Chuẩn GCD (theo code HypCD)")', '',
+              '| | All | Old | New | Ghi chú |', '| --- | --- | --- | --- | --- |']
+    if pub:
+        lines.append(f"| HypCD công bố (Hyp-SelEx, DINOv2) | {pub['all']:.1f} | {pub['old']:.1f} | {pub['new']:.1f} | "
+                     'một lần chạy (Bảng 1 của HypCD) |')
+    for arm, name in (('base', 'Baseline (bug đã sửa)'), ('fc', 'FreqCone')):
+        seeds = ', '.join(f"{p['seed']}: {p[f'{arm}_all']:.2f}/{p[f'{arm}_old']:.2f}/{p[f'{arm}_new']:.2f}"
+                          for p in d['gcd']['per_seed'])
+        lines.append(f"| {name} | {s(st[f'{arm}_all']['mean'])} ± {s(st[f'{arm}_all']['std'])} | "
+                     f"{s(st[f'{arm}_old']['mean'])} ± {s(st[f'{arm}_old']['std'])} | "
+                     f"{s(st[f'{arm}_new']['mean'])} ± {s(st[f'{arm}_new']['std'])} | "
+                     f"TB ± SD trên {st['new']['n']} seed; từng seed {seeds} |")
     lines += [''] + block(list(ORACLE), 'Oracle (chọn bằng test, tham khảo)') + ['']
     if g:
-        lines.append(f"**Cổng {g['gate']}**: {g['rule']} → **{'ĐẠT' if g['pass'] else 'KHÔNG ĐẠT'}**")
+        rows = ', '.join(f"{d[k]['label']}: {'ĐẠT' if ok else 'KHÔNG ĐẠT'}" for k, ok in g['per_row'].items())
+        lines.append(f"**Cổng {g['gate']}** ({g['rule']}): {rows} → **{'ĐẠT' if g['pass'] else 'KHÔNG ĐẠT'}**")
     return '\n'.join(lines) + '\n'
 
 
@@ -111,10 +140,13 @@ def plot(pairs, path):
     curves = {}
     for arm in ('base', 'fc'):
         runs = [b if arm == 'base' else f for _, b, f in pairs]
-        epochs = sorted(set.intersection(*[{t['epoch'] for t in r['test']} for r in runs]))
+        epochs = sorted(set.intersection(*[{t['epoch'] for t in r['test'] if t.get('eval')} for r in runs]))
+        if not epochs:
+            raise ValueError('no per-epoch evaluation to plot (run with --eval_every_epoch True)')
         curves[arm] = {'epoch': np.array(epochs)}
         for m in ('all', 'old', 'new'):
-            vals = np.array([[100 * next(t[m] for t in r['test'] if t['epoch'] == e) for e in epochs] for r in runs])
+            vals = np.array([[100 * next(t['eval'][m] for t in r['test'] if t['epoch'] == e) for e in epochs]
+                             for r in runs])
             curves[arm][m] = (vals.mean(0), vals.min(0), vals.max(0))
     lo = min(c[m][1].min() for c in curves.values() for m in ('all', 'old', 'new'))
     hi = max(c[m][2].max() for c in curves.values() for m in ('all', 'old', 'new'))
@@ -157,7 +189,7 @@ def plot(pairs, path):
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right', ncol=2, frameon=False, fontsize=9, labelcolor=INK)
     n = len(pairs)
-    fig.suptitle(f'Test accuracy per epoch, mean over {n} seed{"s" if n > 1 else ""}'
+    fig.suptitle(f'Test accuracy after each epoch (SS-k-means, v2), mean over {n} seed{"s" if n > 1 else ""}'
                  + (' (band: min-max)' if n > 1 else ''), x=0.01, ha='left', color=INK, fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(path, dpi=150, facecolor=SURFACE)
@@ -181,7 +213,8 @@ def main(argv=None):
         return 2
     d = deltas(pairs)
     g = gate(d, a.gate) if a.gate != 'none' else None
-    print(markdown(d, g))
+    dataset = pairs[0][1]['run'].get('dataset', 'scars')
+    print(markdown(d, g, dataset))
     if a.plot:
         print(f'plot written to {plot(pairs, a.plot)}')
     if a.out:
