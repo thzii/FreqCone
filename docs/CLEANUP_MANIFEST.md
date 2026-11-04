@@ -1,6 +1,6 @@
 # Manifest dọn workspace (kế hoạch v2, mục 1)
 
-Kiểm kê ngày 2026-11-04. Chưa có mục nào được di chuyển hay xóa.
+Kiểm kê ngày 2026-11-04. Đã thực hiện ngày 2026-11-05 theo phần được duyệt (xem mục E).
 
 **Quyết định của người dùng (2026-11-05):**
 - `model/` (planora_sf): GIỮ NGUYÊN.
@@ -53,3 +53,32 @@ Kiểm kê ngày 2026-11-04. Chưa có mục nào được di chuyển hay xóa.
   - `paper/`;
   - `docs/PLAN.md` và manifest này. Đây là ngoại lệ bắt buộc, vì hai file này mô tả chính việc dọn dẹp.
 - Commit, gắn tag `pilot-v1.2`, rồi push.
+
+## E. Đã thực hiện (2026-11-05)
+
+**Phần được duyệt:**
+- Xóa mọi `__pycache__` và file trung gian LaTeX trong repo; thêm các mẫu này vào `.gitignore`.
+- Giữ `.tex`, `tab_*.tex`, `macros*.tex`, `*.dat`, `numbers.json` và PDF.
+- Nén `freqcone_old` và kiểm tra trước khi xóa bản chưa nén.
+
+**Trong repo:**
+- Đã xóa 12 thư mục `__pycache__`, cùng `paper/en/freqcone_draft.aux`, `.log`, `.out`. Không file nào trong số đó được git theo dõi.
+- `.gitignore` đã có sẵn `__pycache__/` và `paper/**/*.{aux,log,out,toc,fls,fdb_latexmk,synctex.gz}`.
+- `mechanism_study/results/sweep.log` là log thí nghiệm (mục A, GIỮ), không phải file LaTeX, nên được giữ.
+- Biên dịch lại `paper/en/freqcone_draft.tex` (`pdflatex` × 2, ra thư mục tạm): cả hai lượt exit 0, PDF 10 trang, không có reference hay citation nào undefined. Không có `paper/vi` để biên dịch.
+
+**Ngoài repo (`261/_archive_20261104/`):**
+- `freqcone_old/` → `freqcone_old.tar.gz` (425 524 byte).
+- SHA-256 `9191cec6d9c3ca8025eed9515155b93b673df26b5c0724ffe8358a37af1e3a81`, ghi trong `freqcone_old.tar.gz.sha256`.
+- Kiểm tra:
+  - tar chứa đúng 75 file.
+  - Giải nén ra thư mục tạm: SHA-256 của cả 75 file khớp bản gốc. Manifest cũ `freqcone_old.sha256` cũng khớp.
+  - Chỉ sau đó mới xóa `freqcone_old/` chưa nén và thư mục tạm.
+
+**Kiểm tra sau dọn (mục D):**
+- `pytest tests_freqcone`: 68 passed, 3 skipped (cả 3 là test CUDA).
+- `test_upstream_equivalence.py`: 7 passed.
+- `git grep -i planora`: không có kết quả.
+- `git grep -i fourex`: chỉ còn trong `mechanism_study/` (run baseline `fourex_partition` thật) và `paper/en/` (trích dẫn FourEx, bảng số).
+
+Các mục B khác (`paper/FourEx — Paper Brief.pptx`, …) chưa được duyệt nên giữ nguyên.
