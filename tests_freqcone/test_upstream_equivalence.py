@@ -73,9 +73,11 @@ def test_defaults_leave_every_hook_inactive():
     from freqcone.hypcd import FCRun
     args = fc_args()
     assert (args.dist_impl, args.freqcone, args.fix_label_order, args.split_train_val, args.smoke_frac,
-            args.results_json, args.profile_steps) == ('upstream', False, False, False, 0, '', 0)
+            args.run_dir, args.profile_steps, args.eval_every_epoch, args.hide_test_stdout, args.resume,
+            args.freqcone_variant) == ('upstream', False, False, False, 0, '', 0, False, False, False, 'v2')
     run = FCRun(args, torch.device('cpu'), val_dataset=None)
     assert run.enabled is False and run.loss is None and run.split is None and run.profiling is False
+    assert run.run_dir is None and run.resume_state is None
 
 
 @pytest.fixture(scope='module')

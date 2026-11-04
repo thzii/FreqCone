@@ -1,15 +1,15 @@
-"""Compute FreqCone's cut-offs f_a, f_b (SNR 5 / 10 dB, FourEx's definition) from the training images only.
+"""Compute FreqCone's cut-offs f_a, f_b (SNR 5 / 10 dB) from the training images only.
 
+Definition, citation and the choices the source paper leaves open: freqcone/cutoffs.py.
 Images read: the labelled training images without the held-out validation split, plus the unlabelled training
 images, through HypCD's test transform at 224 px. Labels are never read (the loop keeps batch[0] only), and the
-script checks that no validation image is among them. The definition, its citation and the choices FourEx
-leaves open are in freqcone/cutoffs.py.
+script checks that no validation image is among them.
 
-Writes cutoffs.json at the repository root (one entry per dataset, other entries kept) and the cut-off table
-in freqcone/README.md. Commit cutoffs.json before the pilot. If a value differs from the handoff's 3 / 11
-(Stanford Cars) or from FourEx Table 7, the computed value is the one used; the table records the difference.
+Writes cutoffs.json at the repository root (one entry per dataset, other entries kept) and the cut-off table in
+README.md. Commit cutoffs.json before any run. If a value differs from the handoff's 3 / 11 (Stanford Cars) or
+from the paper's Table 7, the computed value is the one used; the table shows the difference.
 
-usage (from anywhere): python scripts/freqcone/compute_cutoffs.py --datasets cub scars aircraft --device cuda
+usage: python scripts/freqcone/compute_cutoffs.py --dataset scars [--root DIR] [--out PATH] [--device cuda]
 """
 import argparse
 import json
@@ -25,18 +25,12 @@ if REPO_ROOT not in sys.path:
 import torch  # noqa: E402
 from torch.utils.data import DataLoader  # noqa: E402
 
-from freqcone.cutoffs import CITATION, DEFINITION, FOUREX_TABLE7, LEVELS_DB, PowerAccumulator, cutoffs_from_power  # noqa: E402
+from freqcone.cutoffs import CITATION, DEFINITION, LEVELS_DB, PAPER_TABLE7, PowerAccumulator, cutoffs_from_power  # noqa: E402
 from freqcone.data_checks import check_val_split, item_ids, list_sha256  # noqa: E402
+from freqcone.datasets import build_args, set_root  # noqa: E402
 
 HANDOFF = {'scars': (3, 11)}          # values written in the handoff, never verified
 README_START, README_END = '<!-- cutoffs:start -->', '<!-- cutoffs:end -->'
-
-
-def build_args(name):
-    from data.get_datasets import get_class_splits
-    ns = argparse.Namespace(dataset_name=name, use_ssb_splits=True, prop_train_labels=0.5, split_train_val=True,
-                            smoke_frac=0, image_size=224, interpolation=3, crop_pct=0.875, transform='imagenet')
-    return get_class_splits(ns)
 
 
 def cutoff_image_set(train, val, known_classes):
@@ -70,33 +64,40 @@ def compute(name, device, batch_size=64, num_workers=4, max_images=0):
             'other_levels': {str(int(k)): v for k, v in levels.items() if k not in LEVELS_DB},
             'snr_curve_db': [None if v == float('inf') else round(float(v), 4) for v in curve[:61]],
             'snr_definition': DEFINITION, 'citation': CITATION,
-            'fourex_table7': FOUREX_TABLE7.get(name), 'handoff': HANDOFF.get(name),
+            'paper_table7': PAPER_TABLE7.get(name), 'handoff': HANDOFF.get(name),
             'computed_utc': datetime.now(timezone.utc).isoformat()}
 
 
 def readme_table(entries):
-    lines = [README_START, '| Dataset | f_a (5 dB) | f_b (10 dB) | FourEx Table 7 (5 / 10 dB) | Handoff | Images |',
+    lines = [README_START, '| Tập | f_a (5 dB) | f_b (10 dB) | Bảng 7 của bài gốc (5 / 10 dB) | Handoff | Số ảnh |',
              '| --- | --- | --- | --- | --- | --- |']
     for name, e in sorted(entries.items()):
-        t7 = e.get('fourex_table7') or {}
-        ref = f"{t7.get('5', t7.get(5))} / {t7.get('10', t7.get(10))}" if t7 else '-'
-        hand = f"{e['handoff'][0]} / {e['handoff'][1]}" if e.get('handoff') else '-'
+        t7 = e.get('paper_table7') or {}
+        ref = f"{t7.get('5', t7.get(5))} / {t7.get('10', t7.get(10))}" if t7 else '–'
+        hand = f"{e['handoff'][0]} / {e['handoff'][1]}" if e.get('handoff') else '–'
         lines.append(f"| {name} | {e['f_a']} | {e['f_b']} | {ref} | {hand} | {e['n_images']} |")
-    lines.append('Computed by `scripts/freqcone/compute_cutoffs.py`; the computed values are the ones used.')
+    lines.append('Tính bởi `scripts/freqcone/compute_cutoffs.py`; giá trị tính được là giá trị dùng để train.')
     lines.append(README_END)
     return '\n'.join(lines)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--datasets', nargs='+', default=['cub', 'scars', 'aircraft'])
+    ap.add_argument('--dataset', '--datasets', dest='datasets', nargs='+', default=['scars'])
+    ap.add_argument('--root', default=None, help='dataset directory (one dataset only; default: config.py)')
     ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     ap.add_argument('--batch_size', type=int, default=64)
-    ap.add_argument('--num_workers', type=int, default=4)
+    # upstream sets a local lambda as target_transform: it cannot be pickled for 'spawn' workers (Windows, macOS)
+    ap.add_argument('--num_workers', type=int, default=0 if os.name == 'nt' else 4)
     ap.add_argument('--max_images', type=int, default=0, help='testing only: stop early (entry marked incomplete)')
     ap.add_argument('--out', default=os.path.join(REPO_ROOT, 'cutoffs.json'))
+    ap.add_argument('--readme', default=os.path.join(REPO_ROOT, 'README.md'),
+                    help="README whose cut-off table is updated ('' to skip)")
     a = ap.parse_args(argv)
-    os.chdir(REPO_ROOT)                                   # the SSB split files are read relative to the repo root
+    if a.root:
+        if len(a.datasets) != 1:
+            raise SystemExit('--root needs exactly one --dataset')
+        set_root(a.datasets[0], a.root)
     entries = {}
     if os.path.exists(a.out):
         with open(a.out) as f:
@@ -104,18 +105,19 @@ def main(argv=None):
     for name in a.datasets:
         entries[name] = compute(name, a.device, a.batch_size, a.num_workers, a.max_images)
         e = entries[name]
+        t7 = e['paper_table7'] or {}
         print(f"{name}: f_a {e['f_a']}, f_b {e['f_b']} from {e['n_images']} training images "
-              f"(FourEx Table 7 5/10 dB: {e['fourex_table7'] and (e['fourex_table7'][5], e['fourex_table7'][10])}; "
-              f"handoff: {e['handoff']})")
+              f"(paper Table 7 at 5 / 10 dB: {t7.get(5)} / {t7.get(10)}; handoff: {e['handoff']})")
     with open(a.out, 'w') as f:
         json.dump(entries, f, indent=1)
-    readme = os.path.join(REPO_ROOT, 'freqcone', 'README.md')
-    with open(readme, encoding='utf-8') as f:
-        text = f.read()
-    pattern = re.compile(re.escape(README_START) + '.*?' + re.escape(README_END), re.S)
-    with open(readme, 'w', encoding='utf-8') as f:
-        f.write(pattern.sub(lambda _: readme_table(entries), text))
-    print(f'written {a.out}; commit it (and freqcone/README.md) before the pilot')
+    if a.readme:
+        with open(a.readme, encoding='utf-8') as f:
+            text = f.read()
+        pattern = re.compile(re.escape(README_START) + '.*?' + re.escape(README_END), re.S)
+        if pattern.search(text):
+            with open(a.readme, 'w', encoding='utf-8') as f:
+                f.write(pattern.sub(lambda _: readme_table(entries), text))
+    print(f'written {a.out}; commit it before any run')
 
 
 if __name__ == '__main__':

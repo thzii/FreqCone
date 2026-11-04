@@ -1,8 +1,8 @@
 """FreqCone: frequency entailment cones for Generalized Category Discovery (PyTorch).
 
-Vendored copy of ``freqcone/freqcone_torch.py`` from the mechanism study (the toy experiment's
-reference module, checked against its JAX implementation by ``parity_check.py``). Loss values are
-unchanged (tests_freqcone/test_freqcone_module.py). Additions: aperture presets and construction
+The repository's single FreqCone module. It descends from the mechanism study's module and is checked against
+that study's JAX implementation by mechanism_study/parity_check.py (loss and gradients). Loss values are unchanged
+(tests_freqcone/test_freqcone_module.py). Additions: aperture presets and construction
 checks (APERTURES, cone_min_radius, aperture; FreqConeLoss raises ValueError on a degenerate cone),
 the angle between b and u in the logs, and the two changes below:
   * ``pairwise_dist`` forms the Gram matrix instead of an N x M x n Mobius tensor (O(N M) memory;
@@ -12,16 +12,15 @@ the angle between b and u in the logs, and the two changes below:
   * ``radial_lowpass`` takes ``out_size``: the band-limited view is resampled exactly by cropping
     its spectrum, which is alias-free whenever cutoff < out_size / 2.
 
-Training-time losses for hyperbolic GCD codebases (Hyp-SimGCD, Hyp-SelEx, planora_sf).
-Inference is unchanged.
+Training-time losses for hyperbolic GCD code bases (here: Hyp-SelEx from HypCD). Inference is unchanged.
 
 Integration sketch (inside the training step, after the base method has produced the
 Poincare-ball points u1, u2 of the two augmented views with HypCD's mapping):
 
-    from freqcone_torch import FreqConeLoss, radial_lowpass
+    from freqcone.freqcone_torch import FreqConeLoss, radial_lowpass
 
-    # w_ent: choose on known-class validation; f_a, f_b: FourEx Table 7 cut-offs at 5 / 10 dB for Stanford Cars
-    freqcone = FreqConeLoss(c=0.05, w_ent=0.03, f_a=3.0, f_b=11.0)
+    # w_ent: choose on known-class validation; f_a, f_b: SNR 5 / 10 dB cut-offs from cutoffs.json
+    freqcone = FreqConeLoss(c=0.1, w_ent=0.03, f_a=3.0, f_b=11.0, clip_r=2.0)
     z_a = proj_head(backbone(radial_lowpass(view1_images, freqcone.f_a)))   # Euclidean, (B, n)
     z_b = proj_head(backbone(radial_lowpass(view1_images, freqcone.f_b)))
     loss_fc, logs = freqcone(u1, u2, z_a, z_b)

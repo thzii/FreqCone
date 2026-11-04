@@ -238,8 +238,10 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
     Distance = args.distance
 
     for epoch in range(args.epochs):
-        # >>> freqcone: epoch timer
+        # >>> freqcone: --resume skips the finished epochs (restoring their state); epoch timer
         if FC_RUN.enabled:
+            if FC_RUN.resume_skip(epoch, model, projection_head, optimizer, exp_lr_scheduler):
+                continue
             FC_RUN.start_epoch(epoch)
         # <<< freqcone
         loss_record = AverageMeter()
@@ -458,14 +460,16 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
             best_epoch = epoch
 
         print('Best Train Epochs:  {}'.format(best_epoch))
-        # >>> freqcone: epoch wall time; a --profile_steps run stops after its first epoch
-        if FC_RUN.enabled and FC_RUN.epoch_done(epoch, len(train_loader)):
+        # >>> freqcone: per-epoch evaluation (isolated random state), records, resume state; a profile run stops here
+        if FC_RUN.enabled and FC_RUN.epoch_done(epoch, len(train_loader), model, projection_head, merge_train_loader_test,
+                                                test, (all_acc_test, old_acc_test, new_acc_test), optimizer,
+                                                exp_lr_scheduler):
             return
         # <<< freqcone
 
-    # >>> freqcone: last-epoch record written to --results_json (test_last, val, geometry, upstream_best)
-    if FC_RUN.enabled and args.results_json:
-        FC_RUN.final_eval(model, projection_head, merge_train_loader_test, test, best_epoch, best_stats)
+    # >>> freqcone: run.json after the last epoch (it holds no test number)
+    if FC_RUN.enabled and args.run_dir:
+        FC_RUN.final_eval(model, projection_head, merge_train_loader_test, test)
     # <<< freqcone
     print('############# Final Reports #############')
     print('Best Train Accuracies: All {:.4f} | Old {:.4f} | New {:.4f}'.format(best_stats[0], best_stats[1], best_stats[2]))
@@ -817,8 +821,10 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False, sampler=sampler, drop_last=True)
     test_loader_unlabelled = DataLoader(unlabelled_train_examples_test, num_workers=args.num_workers, batch_size=int(args.batch_size / 2), shuffle=False)
     test_loader_labelled = DataLoader(test_dataset, num_workers=args.num_workers, batch_size=int(args.batch_size / 2), shuffle=False)
-    # >>> freqcone: hooks object (inactive unless --freqcone, --results_json or --profile_steps is set)
-    FC_RUN = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'))
+    # >>> freqcone: hooks object (inactive unless --freqcone, --run_dir or --profile_steps is set)
+    import sys as _fc_sys
+    FC_RUN = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'), datasets=datasets)
+    FC_RUN.install_quiet_output(_fc_sys.modules[__name__])
     # <<< freqcone
 
     # ----------------------

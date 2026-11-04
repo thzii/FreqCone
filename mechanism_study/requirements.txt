@@ -1,0 +1,8 @@
+# CPU environment used on 2026-11-04 to re-run verify_math.py, parity_check.py, aggregate.py and make_tables.py.
+# Separate from the training environment: JAX needs numpy >= 1.26, the training requirements pin numpy 1.24.4.
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.5.1
+torch==2.8.0
+jax[cpu]==0.7.1
+optax==0.2.8

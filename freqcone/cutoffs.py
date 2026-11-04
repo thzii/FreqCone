@@ -1,24 +1,25 @@
-"""SNR cut-offs for FreqCone's coarse views: FourEx's definition, computed without labels.
+"""SNR cut-offs for FreqCone's coarse views, computed without labels.
 
-FourEx (Rastegar et al., "Fourier Self-Supervision for Fine-Grained Generalized Category Discovery",
-ECCV 2026, arXiv 2608.08963) sets its filter thresholds from the spectral signal-to-noise ratio
+Source of the definition: Rastegar, Ghadimi Atigh, Mettes, Asano, Snoek, "Fourier Self-Supervision for
+Fine-Grained Generalized Category Discovery", ECCV 2026, arXiv 2608.08963 (read on 2026-11-04 from
+arxiv.org/html/2608.08963):
+  * Section 4 ("Extraction of Critical Frequencies"):
+        SNR(f_c) = 10 log( sum_{f <= f_c} |X(f)|^2 / sum_{f > f_c} |X(f)|^2 ),
+    X the Fourier transform of an image, f_c the cut-off; the threshold is computed per category and averaged.
+  * Section 9.1, Table 7: per-dataset cut-offs at 5 / 10 / 15 / 20 / 25 dB, "the maximum cutoff frequency that
+    results in a particular SNR", determined before training from training images. Values in PAPER_TABLE7.
+The paper does not state the frequency metric (its filters in Section 3 are box-shaped, 1(|u| < f, |v| < f)),
+the resolution, the normalisation or the handling of DC. The authors' code is not released.
 
-    SNR(f_c) = 10 log10( sum_{f <= f_c} |X(f)|^2 / sum_{f > f_c} |X(f)|^2 )          (FX-P §4)
-
-with per-dataset values in FX-A §9.1, Table 7. Transcription used here: PLANORA_SF_Method_Spec.md §4.3,
-marked there as verbatim from the paper. FourEx's code is not released: github.com/SarahRastegar/FourEx
-holds only a README ("Code is coming soon!", commit 02f5c37, checked 2026-11-04).
-
-FourEx leaves the measurement open (spec, item U-09). Fixed here, before any run:
-  * frequency metric: radial |k| = sqrt(k_u^2 + k_v^2) on the integer DFT grid (k = fftfreq(n) * n), with
-    "f <= f_c" exactly as in the mask of FreqCone's L_f (freqcone_torch.radial_lowpass without pre-blur),
-    so "x^a is the 5 dB view" holds for the filter that is actually applied;
-  * |X|^2: power summed over colour channels, averaged over images, DC included;
-  * images: the training split only (labelled + unlabelled, without the held-out validation images),
-    through HypCD's test transform (resize 256, centre crop 224, ImageNet normalisation), i.e. the tensors
-    the network receives;
-  * pooling: one mean spectrum over all those images and no labels. FourEx instead averages per-category
-    thresholds, which needs a class label for every image; GCD has labels only for the labelled part;
+Fixed here, before any run:
+  * metric: radial |k| = sqrt(k_u^2 + k_v^2) on the integer DFT grid (k = fftfreq(n) * n), with "f <= f_c" as in
+    the mask of FreqCone's L_f (freqcone_torch.radial_lowpass without its pre-blur), so that "x^a is the 5 dB view"
+    holds for the filter that training applies;
+  * |X|^2: power summed over colour channels and averaged over images, DC included;
+  * images: the training split only (labelled + unlabelled, validation split excluded), through HypCD's test
+    transform (resize 256, centre crop 224, ImageNet normalisation), i.e. the tensors the network receives;
+  * pooling: one mean spectrum over all those images and no labels (the paper's per-category average needs a
+    class label for every image; GCD has labels only for the labelled part);
   * selection: the smallest integer f_c with SNR(f_c) >= L dB (SNR is non-decreasing in f_c).
 """
 import math
@@ -26,9 +27,9 @@ import math
 import numpy as np
 import torch
 
-# FX-A Table 7 cut-offs at 5 / 10 / 15 / 20 / 25 dB, as transcribed in planora_sf (config.py, CUTOFF_TABLE).
-# Reference only: the values used for training come from compute_cutoffs.py.
-FOUREX_TABLE7 = {
+# Table 7 of arXiv 2608.08963 (Section 9.1): cut-offs at 5 / 10 / 15 / 20 / 25 dB. Reference only; training uses
+# the values that scripts/freqcone/compute_cutoffs.py computes.
+PAPER_TABLE7 = {
     'cub': {5: 2, 10: 8, 15: 23, 20: 45, 25: 55},
     'aircraft': {5: 2, 10: 9, 15: 27, 20: 50, 25: 55},
     'scars': {5: 3, 10: 11, 15: 27, 20: 47, 25: 55},
@@ -38,9 +39,8 @@ DEFINITION = ('SNR(f) = 10 log10(sum_{|k|<=f} P(k) / sum_{|k|>f} P(k)); P = chan
               'all training images (labelled + unlabelled, validation split excluded, no labels), HypCD test '
               'transform at 224 px; |k| radial on the integer DFT grid, as in FreqCone L_f; cut-off = smallest '
               'integer f with SNR(f) >= level')
-CITATION = ('FourEx, Rastegar et al., ECCV 2026, arXiv 2608.08963: SNR formula FX-P §4; levels and per-dataset '
-            'cut-offs FX-A §9.1, Table 7 (transcribed in PLANORA_SF_Method_Spec.md §4.3); official code not '
-            'released (github.com/SarahRastegar/FourEx @ 02f5c37: README only)')
+CITATION = ('Rastegar et al., Fourier Self-Supervision for Fine-Grained Generalized Category Discovery, ECCV 2026, '
+            'arXiv 2608.08963: SNR in Section 4, cut-offs in Section 9.1, Table 7')
 
 
 def radial_frequency(h: int, w: int, device=None) -> torch.Tensor:

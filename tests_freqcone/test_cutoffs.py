@@ -1,4 +1,4 @@
-"""Section 1.1: SNR cut-offs follow FourEx's formula for FreqCone's actual filter, from training images only."""
+"""SNR cut-offs: the source paper's formula applied to FreqCone's actual filter, from training images only."""
 import importlib.util
 import os
 
@@ -66,6 +66,6 @@ def test_script_uses_training_images_only(fake_cub, monkeypatch):
     n_train = len(train.labelled_dataset) + len(train.unlabelled_dataset)
     assert out['n_images'] == n_train and out['complete']
     assert out['validation_excluded']['n_val'] == len(datasets['val'])
-    assert out['f_a'] < out['f_b'] and out['fourex_table7'] == {5: 2, 10: 8, 15: 23, 20: 45, 25: 55}
+    assert out['f_a'] < out['f_b'] and out['paper_table7'] == {5: 2, 10: 8, 15: 23, 20: 45, 25: 55}
     ids, _ = mod.cutoff_image_set(train, datasets['val'], range(100))
     assert not {int(i.split(':')[0]) for i in ids} & {int(i) for i in datasets['val'].uq_idxs}
