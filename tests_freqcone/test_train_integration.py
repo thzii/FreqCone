@@ -1,6 +1,5 @@
 """FCRun hooks on a tiny CPU model with HypCD's own head (DINOHead) and mapping (ToPoincare)."""
 import json
-import types
 
 import pytest
 import torch
@@ -8,9 +7,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from conftest import FakeKMeans, needs_cuda
+from data.data_utils import MergedDataset
 from freqcone.hypcd import FCRun
 from freqcone.pilot_tools import check_run_dir
-from helpers import MergedTest, fc_args, make_model
+from helpers import Split, fc_args, make_model
 
 
 def test_step_adds_a_finite_term_and_routes_gradients():
@@ -94,32 +94,24 @@ def test_non_finite_loss_stops_the_run():
         run.check_finite(torch.tensor(float('nan')), 3, 41)
 
 
-class FakeSplit:
-    """Labelled / unlabelled / validation subsets with uq_idxs (Stanford Cars layout: path list + 1-based targets)."""
-
-    def __init__(self, idx, targets):
-        self.uq_idxs, self.data, self.target = list(idx), [f'/x/{i}.jpg' for i in idx], [t + 1 for t in targets]
-
-
 def test_final_record_with_validation(tmp_path):
     args = fc_args(freqcone=True, run_dir=str(tmp_path / 'R1'), split_train_val=True, run_id='R1', fc_diag_images=0)
     model, projection_head = make_model(args)
     g = torch.Generator().manual_seed(1)
-    train = types.SimpleNamespace(labelled_dataset=FakeSplit(range(0, 30), [i % 3 for i in range(30)]),
-                                  unlabelled_dataset=FakeSplit(range(30, 60), [i % 6 for i in range(30)]))
-    val_split = FakeSplit(range(60, 75), [i % 3 for i in range(15)])
     images = torch.randn(75, 3, 32, 32, generator=g)
+    train = MergedDataset(Split(images[:30], [i % 3 for i in range(30)], range(0, 30)),
+                          Split(images[30:60], [i % 6 for i in range(30)], range(30, 60)))
+    val_split = Split(images[60:], [i % 3 for i in range(15)], range(60, 75))
     run = FCRun(args, torch.device('cpu'), train_dataset=train, val_dataset=val_split,
                 datasets={'train_labelled': train.labelled_dataset, 'val': val_split})
     assert run.split['n_val'] == 15 and run.data_lists['val']['n'] == 15
-    run.val_dataset = TensorDataset(images[60:], torch.arange(15) % 3)      # same 15 images as tensors
     run.kmeans_cls = FakeKMeans
     run.start_epoch(0)
     x = images[:12]
     run.step(model, projection_head[0], x, projection_head(model(x)), 6, 0, 0)
+    run.record_supcon(torch.ones(6, dtype=torch.bool), 1.0, 1.0)
     run.end_epoch(0, 1.0, 1.0, 0.5)
-    loader = DataLoader(MergedTest(images[30:54], torch.arange(24) % 6,
-                                   TensorDataset(images[:30], torch.arange(30) % 3)), batch_size=6)
+    loader = DataLoader(train, batch_size=6)
     run.epoch_done(0, 10, model, projection_head, loader, lambda m, l, a: {'all_acc': .5, 'old_acc': .6, 'new_acc': .4},
                    (0.5, 0.6, 0.4), gcd_used=(0.55, 0.65, 0.45))
     run.final_eval(model, projection_head, loader, lambda m, l, a: {'all_acc': .5, 'old_acc': .6, 'new_acc': .4})
@@ -128,7 +120,7 @@ def test_final_record_with_validation(tmp_path):
     assert rec['val']['metric'] == 'ss_kmeans_known_hungarian' and len(rec['val']['per_sample_pred']) == 15
     assert rec['val']['val_list_sha256'] == run.split['val_list_sha256']
     geo = rec['geometry_final']
-    assert geo['n_images'] == 24 and set(geo['per_aperture']) == {'A1', 'A2', 'A3'}
+    assert geo['n_images'] == 60 and set(geo['per_aperture']) == {'A1', 'A2', 'A3'}
     assert abs(geo['per_aperture']['A2']['depth_b'] - 0.866) < 1e-3
     fc = rec['freqcone']
     assert fc['aperture'] == 'A1' and abs(fc['psi_a'] - 55.2) < 0.2 and abs(fc['depth_b'] - 1.282) < 1e-3

@@ -251,6 +251,10 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
 
         with torch.no_grad():
             if epoch % prototype_extraction_interval == 0:
+                # >>> freqcone: labelled images present, validation split intact (before every SS-k-means)
+                if FC_RUN.enabled:
+                    FC_RUN.check_data(merge_train_loader)
+                # <<< freqcone
                 uq_index, all_preds, cluster_protos_list, preds_ind_list, metrics = extract_labeled_protos(model, merge_train_loader, args=args)
                 for i in range(len(preds_ind_list)):
                     preds_ind_list[i] = preds_ind_list[i].to(device).long()
@@ -371,6 +375,10 @@ def train(projection_head, model, train_loader, test_loader, unlabelled_train_lo
             sup_con_labels = class_labels[mask_lab]
             sup_con_loss = sup_con_crit(sup_con_feats, labels=sup_con_labels)
             sup_con_loss_angle = sup_con_crit_angle(sup_con_feats, labels=sup_con_labels)
+            # >>> freqcone: labelled images and supervised SupCon value of this step (before the pseudo-label levels)
+            if FC_RUN.enabled:
+                FC_RUN.record_supcon(mask_lab, sup_con_loss, sup_con_loss_angle)
+            # <<< freqcone
             dimension = semisup_con_feats.shape[-1]
             for i in range(len(preds_ind_list)):
                 sup_con_loss += sup_con_crit(semisup_con_feats[:, :, :int(dimension / 2 ** (i + 1))], labels=preds_ind_list[i][np.argsort(uq_index)[uq_idxs]]) / 2 ** (i + 1)

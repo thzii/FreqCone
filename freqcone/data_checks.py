@@ -3,7 +3,8 @@
 Supports the three fine-grained SSB datasets of the HypCD code: CUB (``data.cub.CustomCub2011``,
 pandas ``data``), Stanford Cars (``data.stanford_cars.CarsDataset``, path list ``data``) and FGVC-Aircraft
 (``data.fgvc_aircraft.FGVCAircraft``, ``samples``). ``uq_idxs`` index the whole training set, so the
-labelled, unlabelled and validation subsets can be compared directly.
+labelled, unlabelled and validation subsets can be compared directly. compact_uq_idxs renumbers the two training
+subsets for upstream's pseudo-label lookup; source_ids keeps giving the numbering of the whole training set.
 """
 import hashlib
 import importlib
@@ -37,8 +38,13 @@ def raw_targets(ds):
     raise TypeError(f'unsupported dataset type {type(ds).__name__}')
 
 
+def source_ids(ds):
+    """uq_idxs in the numbering of the whole training set, also after compact_uq_idxs."""
+    return getattr(ds, 'source_uq_idxs', ds.uq_idxs)
+
+
 def item_ids(ds):
-    return [f'{int(i)}:{n}' for i, n in zip(ds.uq_idxs, item_names(ds))]
+    return [f'{int(i)}:{n}' for i, n in zip(source_ids(ds), item_names(ds))]
 
 
 def list_sha256(ids):
@@ -48,9 +54,9 @@ def list_sha256(ids):
 def check_val_split(labelled, unlabelled, val, known_classes):
     """Raise AssertionError unless the validation split is non-empty, disjoint from both training subsets and
     known-class only. Returns its identity (SHA-256 of the sorted 'uq_idx:file' list) and sizes."""
-    v = {int(i) for i in val.uq_idxs}
-    lab = {int(i) for i in labelled.uq_idxs}
-    unl = {int(i) for i in unlabelled.uq_idxs}
+    v = {int(i) for i in source_ids(val)}
+    lab = {int(i) for i in source_ids(labelled)}
+    unl = {int(i) for i in source_ids(unlabelled)}
     if not v:
         raise AssertionError('validation split is empty')
     if v & lab:
@@ -65,7 +71,47 @@ def check_val_split(labelled, unlabelled, val, known_classes):
             'n_labelled': len(lab), 'n_unlabelled': len(unl)}
 
 
+def check_merged_train(merged, known_classes):
+    """Raise AssertionError unless the merged training set can drive SS-k-means and the supervised loss: labelled
+    images exist, all of known classes, every known class among them. MergedDataset marks an image as labelled by
+    its position, so these counts are the ones mask_lab gives. Returns the sizes recorded in run.json."""
+    labelled, unlabelled = merged.labelled_dataset, merged.unlabelled_dataset
+    known = sorted(int(k) for k in known_classes)
+    if len(labelled) == 0:
+        raise AssertionError('the merged training set has no labelled image')
+    targets = raw_targets(labelled)
+    novel = set(targets.tolist()) - set(known)
+    if novel:
+        raise AssertionError(f'{len(novel)} novel classes among the labelled images')
+    per_class = np.bincount(targets, minlength=known[-1] + 1)[known]
+    if (per_class == 0).any():
+        raise AssertionError(f'{int((per_class == 0).sum())} known classes have no labelled image in the merged '
+                             f'training set')
+    return {'n_labelled': len(labelled), 'n_unlabelled': len(unlabelled),
+            'labelled_per_known_min': int(per_class.min()), 'labelled_per_known_max': int(per_class.max())}
+
+
+def compact_uq_idxs(labelled, unlabelled):
+    """Upstream looks pseudo-labels up with preds[np.argsort(uq_index)[uq_idxs]] (train(), three lines), which holds
+    only if the merged training set's uq_idxs are exactly 0..N-1. Holding images out (--split_train_val,
+    --smoke_frac) leaves gaps: ids go out of bounds or reach another image. Replace them by their rank, which
+    changes nothing when there is no gap. The original ids stay in source_uq_idxs. Returns the number of gaps."""
+    ids = np.concatenate([np.asarray(source_ids(labelled)), np.asarray(source_ids(unlabelled))]).astype(np.int64)
+    if np.unique(ids).size != ids.size:
+        raise AssertionError('duplicate uq_idxs in the merged training set')
+    gaps = int(ids.max()) + 1 - ids.size
+    if gaps == 0:
+        return 0
+    rank = np.searchsorted(np.sort(ids), ids)
+    labelled.source_uq_idxs, unlabelled.source_uq_idxs = source_ids(labelled), source_ids(unlabelled)
+    labelled.uq_idxs, unlabelled.uq_idxs = rank[:len(labelled)], rank[len(labelled):]
+    return gaps
+
+
 def keep_every(ds, k, dataset_name):
-    """Smoke tests only: keep positions 0, k, 2k, ... with the dataset module's own subsample_dataset."""
+    """Smoke tests only: keep every k-th image of each class, the first one included, with the dataset module's own
+    subsample_dataset (no random draws). Every class of the split stays represented."""
     subsample = importlib.import_module(SUBSAMPLE_MODULES[dataset_name]).subsample_dataset
-    return subsample(ds, np.arange(0, len(ds), int(k)))
+    targets = raw_targets(ds)
+    keep = np.concatenate([np.nonzero(targets == c)[0][::int(k)] for c in np.unique(targets)])
+    return subsample(ds, np.sort(keep))

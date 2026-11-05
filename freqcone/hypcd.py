@@ -7,10 +7,14 @@ With the default flags none of them changes the computation:
 tests_freqcone/test_upstream_equivalence.py checks that deleting the marked blocks gives back the upstream
 files byte for byte, and that these defaults leave every hook inactive.
 
+Held-out images leave gaps in uq_idxs, which upstream's pseudo-label lookup cannot take: FCRun renumbers the merged
+training set (data_checks.compact_uq_idxs) and checks it before training and before every SS-k-means (check_data).
+
 Outputs of a run (--run_dir runs/<run_id>):
-  run.json            setting, provenance, checksums, validation result of the last epoch, geometry, cost.
-                      It holds no test number.
-  epochs_val.jsonl    one line per epoch: validation accuracy, losses, FreqCone diagnostics, lr, time
+  run.json            setting, provenance, checksums, image counts per split (data_counts), validation result of
+                      the last epoch, geometry, cost. It holds no test number.
+  epochs_val.jsonl    one line per epoch: validation accuracy, losses, supervised SupCon term (sup_con: labelled
+                      images that went through it, mean value), FreqCone diagnostics, lr, time
   epochs_test.jsonl   one line per epoch (test numbers live only here; nothing prints them with --hide_test_stdout):
                         gcd            the All / Old / New upstream itself pairs with this epoch (SS-k-means on the
                                        training set at the start of the epoch, or test_kmeans on the unlabelled set
@@ -42,7 +46,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from freqcone.data_checks import check_val_split, item_ids, list_sha256
+from data.data_utils import MergedDataset
+from freqcone.data_checks import check_merged_train, check_val_split, compact_uq_idxs, item_ids, list_sha256
 from freqcone.freqcone_torch import (APERTURES, FreqConeLoss, aperture, cone_energy, depth, radial_lowpass,
                                      scaled_depth, to_fixed_depth)
 
@@ -246,10 +251,14 @@ class FCRun:
                                          val_dataset, args.train_classes)
             print(f'[FreqCone] validation split: {json.dumps(self.split)}')
         self.data_lists = self._data_lists(datasets) if (self.enabled and datasets) else None
+        self.data_counts = None
+        if train_dataset is not None and (self.enabled or args.split_train_val or args.smoke_frac):
+            self.data_counts = self._prepare_training_data(train_dataset, datasets or {})
         self.kmeans_cls = None           # tests inject a CPU stand-in; None = upstream K_Means (needs CUDA)
         self.command = _command()
         self.history, self.diagnostics, self.epoch_times, self.eval_times = [], [], [], []
         self._sum, self._n, self._win, self._win_n = {}, 0, {}, 0
+        self._sup = None
         self._t_epoch, self._last_tick, self._step_times = None, None, []
         self._t_start = time.time()
         self.last_val = None
@@ -301,6 +310,28 @@ class FCRun:
             self.args.writer = _QuietWriter(self.args.writer)
 
     # ------------------------------------------------------------------ training-time hooks
+    def _prepare_training_data(self, train_dataset, datasets):
+        """Before training: the checks of check_data, then close the gaps that held-out images leave in uq_idxs. The
+        loaders read the same dataset objects, so upstream's lookup sees the new ids. merge_train_loader_test keeps
+        the original ids: upstream never looks anything up with them."""
+        counts = check_merged_train(train_dataset, self.args.train_classes)
+        gaps = compact_uq_idxs(train_dataset.labelled_dataset, train_dataset.unlabelled_dataset)
+        val, test = datasets.get('val'), datasets.get('test')
+        counts.update(n_val=None if val is None else len(val), n_test_roi=None if test is None else len(test),
+                      uq_gaps_closed=gaps)
+        print(f'[FreqCone] data: {json.dumps(counts)}')
+        return counts
+
+    def check_data(self, loader):
+        """Before every SS-k-means (upstream's extract_labeled_protos and test(), each with its merged loader). Stops
+        the run if SS-k-means would get no labelled anchors or incomplete ones, or if the validation split leaked."""
+        merged = loader.dataset
+        if not isinstance(merged, MergedDataset):
+            raise AssertionError(f'SS-k-means needs a MergedDataset loader, got {type(merged).__name__}')
+        check_merged_train(merged, self.args.train_classes)
+        if self.split is not None:
+            check_val_split(merged.labelled_dataset, merged.unlabelled_dataset, self.val_dataset, self.args.train_classes)
+
     def resume_skip(self, epoch, model, projection_head, optimizer, scheduler):
         """--resume: skip the finished epochs; at the last one, restore every state saved after it."""
         st = self.resume_state
@@ -389,12 +420,37 @@ class FCRun:
         self._last_tick = now
         return batch_idx + 1 >= self.args.profile_steps
 
+    def record_supcon(self, mask_lab, loss_distance, loss_angle):
+        """One step: labelled images in the batch and the purely supervised SupCon term, before the pseudo-label
+        levels are added to it. The two values are the Poincare-distance and the angular forms of that term."""
+        n = int(mask_lab.sum())
+        s = self._sup or {'n_labelled': 0, 'loss_distance': 0.0, 'loss_angle': 0.0}
+        s['n_labelled'] += n
+        s['loss_distance'] += n * float(loss_distance)
+        s['loss_angle'] += n * float(loss_angle)
+        self._sup = s
+
+    def _close_supcon(self, epoch):
+        """Means over the labelled images of the epoch. An epoch without supervision stops the run: it would train
+        on the contrastive term alone and still produce a number."""
+        s, self._sup = self._sup, None
+        if s is None:
+            return None
+        n = s['n_labelled']
+        out = {'n_labelled': n, 'loss_distance': s['loss_distance'] / max(n, 1), 'loss_angle': s['loss_angle'] / max(n, 1)}
+        if n == 0 or not (out['loss_distance'] > 0 and out['loss_angle'] > 0):
+            raise RuntimeError(f'epoch {epoch + 1}: the supervised loss saw {n} labelled images, mean values '
+                               f'{out["loss_distance"]} / {out["loss_angle"]}: stop and find out why')
+        print(f'[FreqCone] epoch {epoch + 1}: supervised SupCon on {n} labelled images, mean '
+              f'{out["loss_distance"]:.4f} (distance) / {out["loss_angle"]:.4f} (angle)')
+        return out
+
     def end_epoch(self, epoch, loss_avg, contrastive_avg, lambda_distance):
         """After the training steps of an epoch (before upstream's per-epoch evaluation)."""
         if self._win_n:
             self._flush(epoch, -1)
         rec = {'epoch': epoch + 1, 'loss': loss_avg, 'contrastive': contrastive_avg, 'lambda_distance': lambda_distance,
-               'train_s': time.time() - self._t_epoch, 'steps': self._n}
+               'train_s': time.time() - self._t_epoch, 'steps': self._n, 'sup_con': self._close_supcon(epoch)}
         rec.update({k: v / max(self._n, 1) for k, v in self._sum.items()})
         self._sum, self._n = {}, 0
         self.history.append(rec)
@@ -417,6 +473,7 @@ class FCRun:
         args = self.args
         m = val = None
         if args.eval_every_epoch and self.run_dir:
+            self.check_data(loader)
             t0 = time.time()
             with isolated_rng(args.seed * 1000 + epoch + 1):
                 m = test_fn(model, loader, args)
@@ -451,6 +508,7 @@ class FCRun:
         last = self.history[-1] if self.history else {}
         line = {'epoch': epoch + 1, 'val_acc': val['value'] if val else None,
                 'losses': {k: last.get(k) for k in ('loss', 'contrastive', 'fc_dir', 'fc_ent', 'fc_con')},
+                'sup_con': last.get('sup_con'),
                 'fc': {'depth_full': last.get('fc_depth_full'), 'in_cone': last.get('fc_in_cone'),
                        'clip_frac': last.get('clip_frac'), 'angle_b_u': last.get('fc_angle_b_u'), 'depth_b': self.depth_b},
                 'lambda_distance': last.get('lambda_distance'),
@@ -598,6 +656,7 @@ class FCRun:
         t0 = time.time()
         args = self.args
         if not args.eval_every_epoch:
+            self.check_data(merge_train_loader_test)
             with isolated_rng(args.seed * 1000 + args.epochs):
                 m = test_fn(model, merge_train_loader_test, args)
                 if self.split is not None:
@@ -643,7 +702,7 @@ class FCRun:
             'eval_every_epoch': a.eval_every_epoch, 'hide_test_stdout': a.hide_test_stdout,
             'gpu_name': torch.cuda.get_device_name(self.device) if cuda else None,
             'torch_version': torch.__version__, 'cuda_version': torch.version.cuda,
-            'dinov2_checkpoint': ckpt, 'data_lists': self.data_lists,
+            'dinov2_checkpoint': ckpt, 'data_lists': self.data_lists, 'data_counts': self.data_counts,
             'freqcone': {'enable': bool(a.freqcone), 'variant': a.freqcone_variant if a.freqcone else None,
                          'w_dir': a.fc_w_dir, 'w_ent': a.fc_w_ent, 'w_con': a.fc_w_con, 'K': a.fc_K,
                          'aperture': self.aperture_name, 'r_a': self.r_a, 'r_b': self.r_b,

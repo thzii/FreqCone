@@ -14,6 +14,7 @@ EPOCHS=2
 OUT=runs/smoke_${DATASET}
 mkdir -p "$OUT"
 source scripts/freqcone/hypselex_args.sh
+python -m freqcone.pilot_tools env
 if [ ${#FC_CUTS[@]} -eq 0 ]; then echo "cutoffs.json has no $DATASET entry: run scripts/freqcone/compute_cutoffs.py first" >&2; exit 1; fi
 SMOKE=(--smoke_frac 10 --fc_log_every 2 --seed 7)
 FC=(--freqcone True "${FC_CUTS[@]}")

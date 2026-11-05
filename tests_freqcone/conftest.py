@@ -61,6 +61,38 @@ class FakeCub(torch.utils.data.Dataset):
         return img, target, self.uq_idxs[idx]
 
 
+class FakeCars(torch.utils.data.Dataset):
+    """Stand-in for data.stanford_cars.CarsDataset with the same attributes (path list `data`, 1-based `target`,
+    `uq_idxs`) and item (image, 0-based class, uq_idx), classes interleaved as in the real annotation files. Sized so
+    that, through upstream's 50 % labelled and 20 % validation steps, every known class keeps at least 2 labelled
+    training images and 1 validation image (test_merged_train.py checks it). Images are class colours plus noise."""
+    N_CLASSES, N_KNOWN, PER_CLASS_TRAIN, PER_CLASS_TEST = 8, 4, 24, 4
+
+    def __init__(self, train=True, limit=0, data_dir=None, transform=None):
+        per = self.PER_CLASS_TRAIN if train else self.PER_CLASS_TEST
+        classes = np.arange(1, self.N_CLASSES + 1).repeat(per)
+        classes = classes[np.random.default_rng(int(train)).permutation(classes.size)]
+        split = 'train' if train else 'test'
+        self.data = [f'/cars_{split}/{i + 1:05d}.jpg' for i in range(classes.size)]
+        self.target = classes.tolist()
+        self.transform, self.target_transform, self.train = transform, None, train
+        self.uq_idxs = np.array(range(len(self)))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        target = self.target[idx] - 1
+        colour = torch.randn(3, 1, 1, generator=torch.Generator().manual_seed(target)) * 3
+        seed = int(os.path.basename(self.data[idx])[:-4]) + (0 if self.train else 100000)
+        image = colour + 0.3 * torch.randn(3, 32, 32, generator=torch.Generator().manual_seed(seed))
+        if self.transform is not None:
+            image = self.transform(image)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+        return image, target, self.uq_idxs[idx]
+
+
 @pytest.fixture
 def fake_cub(monkeypatch):
     import data.cub

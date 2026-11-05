@@ -30,6 +30,12 @@ def test_synthetic_scars_report_and_cutoffs(tmp_path, monkeypatch):
     assert im['labelled'] + im['validation'] + im['unlabelled'] == im['train_total']
     assert im['unlabelled_novel'] == 98 * 20 and out['validation_per_class']['min'] >= 1
     assert len(out['lists_sha256']['validation']) == 64
+    assert out['labelled_per_class']['min'] >= 2
+    assert out['upstream_labelled']['n'] == 98 * 10                       # 50 % of the known-class images
+    assert 0.8 <= out['upstream_labelled']['ratio'] < 0.9                 # 20 % held out per class, rounded down
+    from freqcone.data_report import markdown
+    text = markdown(out, 'somewhere')
+    assert 'Labelled mỗi lớp known, min–max' in text and '98 / 98' in text and 'somewhere' in text
     mod = _script()
     mod.main(['--dataset', 'scars', '--root', str(root), '--out', str(tmp_path / 'cutoffs.json'), '--readme', '',
               '--num_workers', '0', '--device', 'cpu'])

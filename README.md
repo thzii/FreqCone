@@ -32,7 +32,13 @@ conda create -n freqcone python=3.10 -y
 conda activate freqcone
 pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt -r requirements-dev.txt
+git clone https://github.com/subhadarship/kmeans_pytorch ../kmeans_pytorch     # theo README của upstream
+pip install --editable ../kmeans_pytorch
+python -m freqcone.pilot_tools env                                             # phải in "environment OK"
 ```
+
+- **Bắt buộc cài `kmeans_pytorch` từ GitHub.** `requirements.txt` ghim bản PyPI 0.3, bản này thiếu tham số `tqdm_flag` mà `test_kmeans` của upstream truyền vào. Thiếu bước này, run sẽ dừng với `TypeError` ngay cuối epoch 1. `smoke_gpu.sh` và `pilot_cars.sh` tự gọi lệnh kiểm tra `env`.
+- **Test CUDA chạy trên Linux.** Trên Windows với NumPy 1.x, `np.arange` là int32 nên `K_Means` của upstream báo lỗi kiểu ở bước phân cấp.
 
 **Thí nghiệm cơ chế** chạy trên CPU, trong một môi trường riêng vì JAX cần numpy ≥ 1.26:
 
@@ -44,7 +50,7 @@ pip install -r mechanism_study/requirements.txt
 
 ```bash
 git clone git@github.com:<tài-khoản>/freqcone.git && cd freqcone
-git checkout pilot-v1.2          # hoặc pilot-v2 sau bước profile
+git checkout pilot-v1.3          # hoặc pilot-v2 sau bước profile
 git rev-parse HEAD               # so với hash được gửi kèm tag
 git remote add upstream https://github.com/Visual-AI/HypCD.git
 git remote set-url --push upstream DISABLED      # upstream chỉ để fetch, không bao giờ push
@@ -97,10 +103,10 @@ freqcone/                    # repo git (lịch sử HypCD + nhánh freqcone)
 **Kiểm tra số ảnh và SHA của danh sách file.** Chạy trên mọi máy và so hash:
 
 ```bash
-python -m freqcone.data_report --dataset scars --json runs/data_report_scars.json
+python -m freqcone.data_report --dataset scars --json runs/data_report_scars.json --md docs/DATA_CHECK.md
 ```
 
-Lệnh này in số ảnh của từng phần: labelled, validation, unlabelled (chia known và novel), test. Nó cũng in SHA-256 của từng danh sách file. Commit `runs/data_report_scars.json`.
+Lệnh này in số ảnh của từng phần: labelled, validation, unlabelled (chia known và novel), test; số lớp known / novel (dừng nếu khác 98 / 98); min–max số ảnh labelled mỗi lớp known; tỉ lệ labelled so với upstream không tách val (kỳ vọng ≈ 0,8). Nó cũng in SHA-256 của từng danh sách file. Commit `runs/data_report_scars.json` và `docs/DATA_CHECK.md`.
 
 **Chạy thử khi chưa có dữ liệu thật** (ảnh ngẫu nhiên, chỉ để thử lệnh):
 
@@ -145,10 +151,10 @@ exp_root = '/work/freqcone_outputs'         # upstream lưu model.pt mỗi epoch
 ## 7. Kiểm tra trước khi train
 
 ```bash
-python -m pytest tests_freqcone -q                        # phải đạt toàn bộ; 2 test cần CUDA chỉ chạy trên máy GPU
-python -m freqcone.data_report --dataset scars --json runs/data_report_scars.json
+python -m pytest tests_freqcone -q                        # phải đạt toàn bộ; 6 test cần CUDA chỉ chạy trên máy GPU
+python -m freqcone.data_report --dataset scars --json runs/data_report_scars.json --md docs/DATA_CHECK.md
 python scripts/freqcone/compute_cutoffs.py --dataset scars # ghi cutoffs.json và bảng bên dưới
-git add cutoffs.json README.md runs/data_report_scars.json
+git add cutoffs.json README.md runs/data_report_scars.json docs/DATA_CHECK.md
 git commit -m "data: Stanford Cars cut-offs and data report"
 bash scripts/freqcone/smoke_gpu.sh                         # 2 epoch trên 1/10 dữ liệu, 4 cấu hình
 rm -rf runs/smoke_scars                                    # bắt buộc trước pilot (preflight kiểm tra)
@@ -257,7 +263,7 @@ Mặc định của mọi cờ đều tái lập đúng upstream.
 | `--run_dir` | Thư mục kết quả `runs/<run_id>` | `''` | `runs/<run_id>` |
 | `--resume` | Tiếp tục từ `ckpt_resume.pt` | `False` | Tự động trong `pilot_cars.sh` |
 | `--profile_steps` | Probe: train N bước, đo thời gian và bộ nhớ | `0` | 30 khi profile |
-| `--smoke_frac` | Smoke: giữ mỗi ảnh thứ k | `0` | 10 khi smoke |
+| `--smoke_frac` | Smoke: giữ mỗi ảnh thứ k của từng lớp (lớp nào cũng còn ảnh) | `0` | 10 khi smoke |
 | `--run_id`, `--run_tag`, `--run_attempt` | Định danh run | – | Do script đặt |
 | `--fc_log_every`, `--fc_diag_images` | Chu kỳ ghi chẩn đoán; số ảnh cho hình học cuối | `50`, `2048` | Mặc định |
 
@@ -304,6 +310,19 @@ Mặc định của mọi cờ đều tái lập đúng upstream.
 - **Kiểm tra:** `tests_freqcone/test_label_order.py`; có thêm một test CUDA chạy `K_Means` thật.
 - **Báo cáo:** chênh lệch do sửa bug (R0-repro so với R0) được báo riêng với chênh lệch do FreqCone.
 
+**`uq_idxs` khi giữ ảnh ra ngoài** (`--split_train_val`, `--smoke_frac`):
+- **Cơ chế lỗi:** upstream tra nhãn giả bằng `preds[np.argsort(uq_index)[uq_idxs]]`, công thức này chỉ đúng khi `uq_idxs` của tập train là đúng 0..N−1. Bỏ ảnh val ra tạo khe hở trong dãy số.
+- **Hệ quả nếu không sửa:** `IndexError` ở các bước đầu, hoặc nhãn giả gắn sai ảnh.
+- **Sửa:** `FCRun` đánh số lại tập train theo thứ hạng (`freqcone/data_checks.py: compact_uq_idxs`). Không có khe hở thì không đổi gì, nên R0-repro và cấu hình upstream giữ nguyên. Số gốc nằm ở `source_uq_idxs`; `data_lists` và SHA vẫn dùng số gốc.
+- **Kiểm tra:** `tests_freqcone/test_merged_train.py`, có test đối chứng trên dãy số chưa đánh lại.
+
+**Chặn lỗi sớm.** `FCRun` dừng run (`AssertionError`) trước khi train và trước mỗi lần SS-k-means nếu:
+- loader không phải `MergedDataset`, hoặc không có ảnh labelled;
+- một lớp known không có ảnh labelled, hoặc ảnh labelled thuộc lớp novel;
+- tập val chồng lên labelled / unlabelled, hoặc chứa lớp novel.
+
+Một epoch mà loss có giám sát không thấy ảnh labelled nào, hoặc có giá trị trung bình bằng 0, cũng dừng run (`RuntimeError`).
+
 **Chỉ số val.** Đây là chính quy trình dự đoán của nền, áp lên ảnh val:
 - SS-k-means của upstream, với ảnh labelled train làm điểm neo, k bằng số lớp known.
 - Chấm bằng `cluster_acc` của upstream, tức cùng phép ghép Hungarian mà "All" của giao thức test dùng.
@@ -349,8 +368,9 @@ Mặc định của mọi cờ đều tái lập đúng upstream.
 
 ```
 runs/<run_id>/
-├── run.json            thiết lập, provenance, SHA (DINOv2, danh sách dữ liệu), val epoch cuối, hình học, chi phí. KHÔNG có số test
-├── epochs_val.jsonl    mỗi epoch: epoch, val_acc, losses, fc{depth_full, in_cone, clip_frac, angle_b_u, depth_b}, lambda_distance, lr, time_s
+├── run.json            thiết lập, provenance, SHA (DINOv2, danh sách dữ liệu), data_counts, val epoch cuối, hình học, chi phí. KHÔNG có số test
+├── epochs_val.jsonl    mỗi epoch: epoch, val_acc, losses, sup_con{n_labelled, loss_distance, loss_angle},
+│                       fc{depth_full, in_cone, clip_frac, angle_b_u, depth_b}, lambda_distance, lr, time_s
 │                       (dòng cuối thêm val_per_sample_true / _pred, val_list_sha256)
 ├── epochs_test.jsonl   mỗi epoch: epoch,
 │                         gcd{all, old, new, source, weights_after_epoch}   bộ số upstream gắn với epoch (hàng 1)
@@ -364,6 +384,8 @@ runs/selection.json, runs/g1.json, runs/compare_final.{md,json,png}, runs/profil
 ```
 
 - Epoch được đánh số 1–200.
+- `data_counts` gồm `n_labelled`, `n_unlabelled`, `n_val`, `n_test_roi` (số ảnh, không phải kết quả), `labelled_per_known_min`, `labelled_per_known_max`, `uq_gaps_closed`.
+- `sup_con` là phần SupCon thuần có giám sát, trước khi cộng các cấp nhãn giả: số ảnh labelled đã đi qua (đếm cả lần lấy lặp của sampler) và giá trị trung bình theo ảnh, ở dạng khoảng cách Poincaré và dạng góc.
 - `run.json` theo schema `freqcone-run/2`. Kiểm tra bằng `python -m freqcone.pilot_tools check runs/<run_id>`; lệnh này cũng kiểm rằng `run.json` không chứa số test.
 
 ## 13. Theo dõi khi đang train
@@ -374,6 +396,8 @@ runs/selection.json, runs/g1.json, runs/compare_final.{md,json,png}, runs/profil
 - `clip_frac`: tỉ lệ đặc trưng bị clip; ảnh bị clip có độ sâu 2r = 4,0.
 - `angle_b_u`: góc giữa b và u.
 - `fc_dir`, `fc_ent`, `fc_con`: ba thành phần loss.
+
+**Dòng `[FreqCone] epoch N: supervised SupCon on K labelled images`** (mỗi epoch): K phải dương và giá trị trung bình phải khác 0.
 
 **Ngưỡng độ sâu:**
 - δ(b) = (2/√c)·artanh(r_b). Với c = 0,1, ngưỡng là 1,282 ở A1 và 0,724 ở A3.
@@ -438,6 +462,8 @@ Không tự ý đổi cấu hình.
 | G0 không đạt | Script chạy R0-repro. Nếu R0-repro đạt: chênh lệch đến từ việc sửa bug, ghi lại và đi tiếp. Nếu R0-repro cũng không đạt: dừng và báo. |
 | Vượt ngân sách quá 30 % | `pilot_tools budget` dừng script; báo trước khi chạy tiếp |
 | Preflight báo lỗi | Code khác tag, file chưa commit, hoặc còn kết quả smoke: sửa theo thông báo |
+| `AssertionError` về labelled / val, hoặc `RuntimeError` "the supervised loss saw …" | Dữ liệu hoặc code tách val có vấn đề. Dừng, giữ log, báo lại. Không chạy tiếp. |
+| `TypeError: kmeans() got an unexpected keyword argument 'tqdm_flag'` | Đang dùng `kmeans_pytorch` bản PyPI: cài lại từ GitHub (mục 2) |
 
 ## 17. Tái lập
 

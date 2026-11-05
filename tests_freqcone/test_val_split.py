@@ -81,14 +81,17 @@ def test_ids_and_smoke_subsample(fake_cub):
     train, datasets = build(cub_args())
     ids = item_ids(datasets['val'])
     assert ids[0].split(':', 1)[1].endswith('.jpg') and list_sha256(ids) == list_sha256(list(reversed(ids)))
-    n = len(datasets['val'])
-    small = keep_every(datasets['val'], 10, 'cub')
-    assert len(small) == (n + 9) // 10
+    per_class = np.bincount(raw_targets(datasets['val']))
+    small = keep_every(datasets['val'], 2, 'cub')
+    assert len(small) == sum((n + 1) // 2 for n in per_class)                # every 2nd image within each class
+    assert set(raw_targets(small).tolist()) == set(np.nonzero(per_class)[0].tolist())
 
 
 def test_smoke_flag_shrinks_every_split(fake_cub):
     train, datasets = build(cub_args(smoke_frac=10))
     full, full_sets = build(cub_args())
-    assert len(train.labelled_dataset) == (len(full.labelled_dataset) + 9) // 10
-    assert len(datasets['val']) == (len(full_sets['val']) + 9) // 10
-    assert len(datasets['test']) == (len(full_sets['test']) + 9) // 10
+    assert len(train.labelled_dataset) < len(full.labelled_dataset) / 2
+    assert len(datasets['val']) < len(full_sets['val'])
+    assert len(datasets['test']) < len(full_sets['test'])
+    # no class disappears: a smoke run keeps labelled anchors for every known class
+    assert set(raw_targets(train.labelled_dataset).tolist()) == set(raw_targets(full.labelled_dataset).tolist())

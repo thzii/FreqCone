@@ -115,10 +115,10 @@ def test_profile_measures_evaluation_but_records_nothing(tmp_path):
     fc.start_epoch(0)
     assert [fc.profile_tick(i) for i in range(2)] == [False, True]
     fc.end_epoch(0, 1.0, 1.0, 0.0)
-    from helpers import MergedTest, make_model, noisy_test
+    from helpers import make_model, merged_loader, noisy_test
     model, head = make_model(args)
     data = torch.randn(6, 3, 32, 32)
-    merged = torch.utils.data.DataLoader(MergedTest(data, torch.arange(6) % 6, None), batch_size=6)
+    merged = merged_loader(data, torch.arange(6) % 3, 3)
     assert fc.epoch_done(0, 40, model, head, merged, noisy_test, (0.5, 0.5, 0.5)) is True
     rec = json.loads((tmp_path / 'probe' / 'run.json').read_text())
     assert rec['profile']['eval_s'] is not None and rec['profile']['steps_per_epoch'] == 40

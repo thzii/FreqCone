@@ -24,7 +24,9 @@ REQUIRED_TOP = ['schema', 'run_id', 'git_commit', 'command', 'args', 'dataset', 
 REQUIRED_FC = ['enable', 'variant', 'w_dir', 'w_ent', 'w_con', 'K', 'r_a', 'r_b', 'psi_a', 'psi_b', 'depth_a',
                'depth_b', 'f_a', 'f_b', 'coarse_res']
 REQUIRED_COST = ['time_per_epoch_s', 'peak_mem_gb']
-REQUIRED_VAL_LINE = ['epoch', 'val_acc', 'losses', 'fc', 'lr', 'time_s']
+REQUIRED_VAL_LINE = ['epoch', 'val_acc', 'losses', 'sup_con', 'fc', 'lr', 'time_s']
+REQUIRED_DATA_COUNTS = ['n_labelled', 'n_unlabelled', 'n_val', 'n_test_roi', 'labelled_per_known_min',
+                        'labelled_per_known_max']
 REQUIRED_DIAG = ['depth_full', 'in_cone', 'clip_frac', 'angle_b_u']
 
 
@@ -55,6 +57,10 @@ def check_run_dir(run_dir, profile=False):
         return errs
     if 'geometry_final' not in rec:
         errs.append('missing geometry_final')
+    errs += [f'missing data_counts.{k}' for k in REQUIRED_DATA_COUNTS if k not in (rec.get('data_counts') or {})]
+    hist = rec.get('history') or []
+    if not hist or not all((h.get('sup_con') or {}).get('n_labelled') for h in hist):
+        errs.append('history lacks the supervised SupCon record of some epoch, or it saw no labelled image')
     if rec.get('split_train_val'):
         val = rec.get('val') or {}
         errs += [f'missing val.{k}' for k in ('metric', 'value', 'per_sample_true', 'per_sample_pred', 'val_list_sha256')
@@ -224,6 +230,17 @@ def _git(*cmd):
     return res.returncode, res.stdout.strip()
 
 
+def check_environment():
+    """Problems that would otherwise surface only after the first training epoch."""
+    import inspect
+
+    from kmeans_pytorch import kmeans
+    if 'tqdm_flag' in inspect.signature(kmeans).parameters:
+        return []
+    return ["kmeans_pytorch has no tqdm_flag, which upstream's test_kmeans passes: the PyPI build is too old. Install "
+            "it from https://github.com/subhadarship/kmeans_pytorch (docs/UPSTREAM_README.md, README section 2)"]
+
+
 def preflight(runs_root, decision_path, smoke_dir):
     """Code = the latest pilot-v* tag (commits after it may only touch results under RUNS_ROOT); config.py may
     hold local paths; cutoffs.json and the decision committed and unchanged; no smoke results."""
@@ -265,6 +282,7 @@ def main(argv=None):
     p = sub.add_parser('budget')
     p.add_argument('runs_root')
     p.add_argument('decision')
+    sub.add_parser('env')
     p = sub.add_parser('preflight')
     p.add_argument('runs_root')
     p.add_argument('decision')
@@ -307,6 +325,10 @@ def main(argv=None):
         print(f"budget: {out['actual_hours']:.1f} h used for {out['planned_hours']:.1f} h planned "
               f"({', '.join(out['runs_done'])})" + (' -> more than 30 % over: report before going on' if out['over'] else ''))
         return 3 if out['over'] else 0
+    if a.cmd == 'env':
+        problems = check_environment()
+        print('\n'.join(problems) or 'environment OK')
+        return 1 if problems else 0
     if a.cmd == 'preflight':
         problems = preflight(a.runs_root, a.decision, a.smoke_dir)
         for pr in problems:

@@ -44,6 +44,7 @@ RUNS=runs
 DECISION=$RUNS/profile_scars/decision.json
 source scripts/freqcone/hypselex_args.sh
 
+python -m freqcone.pilot_tools env
 python -m freqcone.pilot_tools preflight "$RUNS" "$DECISION" --smoke_dir "$RUNS/smoke_scars"
 if [ ${#FC_CUTS[@]} -eq 0 ]; then echo "cutoffs.json has no scars entry" >&2; exit 1; fi
 read -r LEVEL COARSE < <(python -c "import json; d = json.load(open('$DECISION')); print(d['level'], d['coarse_res_flag'])")

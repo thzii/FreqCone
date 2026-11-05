@@ -1,16 +1,22 @@
 """Shared test helpers: a tiny CPU model with HypCD's own head and mapping, FreqCone arguments, a training loop
-shaped like upstream's train() (same hook order), and synthetic run directories."""
+shaped like upstream's train() (same hook order), the training script's data path on in-memory Stanford Cars, and
+synthetic run directories."""
 import argparse
+import copy
+import importlib
 import json
 import os
 import random
+import sys
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, RandomSampler, TensorDataset
+from torch.utils.data import DataLoader, RandomSampler, TensorDataset, WeightedRandomSampler
 
-from freqcone.hypcd import SCHEMA, add_args
+from conftest import FakeCars
+from data.data_utils import MergedDataset
+from freqcone.hypcd import SCHEMA, FCRun, add_args
 from hyptorch.nn import ToPoincare
 from models.vision_transformer import DINOHead
 
@@ -45,18 +51,28 @@ def make_model(args, seed=0):
     return model, projection_head
 
 
-class MergedTest(torch.utils.data.Dataset):
-    """Stand-in for upstream's merge_train_loader_test dataset: (image, label, uq_idx, labelled flag)."""
+class Split(torch.utils.data.Dataset):
+    """A data subset in the Stanford Cars layout (path list `data`, 1-based `target`, `uq_idxs`), so that the real
+    MergedDataset and the data checks work on it. Items: (image, 0-based class, uq_idx)."""
 
-    def __init__(self, images, labels, labelled):
-        self.images, self.labels = images, labels
-        self.labelled_dataset = labelled
+    def __init__(self, images, labels, uq_idxs):
+        self.images, self.uq_idxs = images, np.asarray(uq_idxs)
+        self.data = [f'/x/{i}.jpg' for i in uq_idxs]
+        self.target = [int(t) + 1 for t in labels]
 
     def __len__(self):
-        return len(self.images)
+        return len(self.data)
 
     def __getitem__(self, i):
-        return self.images[i], int(self.labels[i]), i, 0
+        return self.images[i], self.target[i] - 1, int(self.uq_idxs[i])
+
+
+def merged_loader(images, labels, n_labelled, batch_size=6):
+    """Upstream's merged loaders on tensors: real MergedDataset, the first n_labelled images labelled."""
+    n = len(images)
+    return DataLoader(MergedDataset(Split(images[:n_labelled], labels[:n_labelled], range(n_labelled)),
+                                    Split(images[n_labelled:], labels[n_labelled:], range(n_labelled, n))),
+                      batch_size=batch_size)
 
 
 def noisy_test(model, loader, args):
@@ -83,8 +99,9 @@ def train_loop(fc, epochs, seed=0, stop_after=None):
     g = torch.Generator().manual_seed(123)
     data = TensorDataset(torch.randn(24, 3, 32, 32, generator=g), torch.arange(24) % 6)
     loader = DataLoader(data, batch_size=6, sampler=RandomSampler(data), drop_last=True)
-    merged = DataLoader(MergedTest(data.tensors[0], data.tensors[1], TensorDataset(data.tensors[0][:9],
-                                                                                torch.arange(9) % 3)), batch_size=6)
+    merged = merged_loader(data.tensors[0], torch.cat([torch.arange(9) % 3, torch.arange(9, 24) % 6]), 9)
+    if fc.data_counts is None:
+        fc.data_counts = fc._prepare_training_data(merged.dataset, {})
     for epoch in range(epochs):
         if fc.resume_skip(epoch, model, head, opt, sched):
             continue
@@ -94,6 +111,7 @@ def train_loop(fc, epochs, seed=0, stop_after=None):
             images = torch.cat([x, x2])
             ball = head(model(images))
             loss = 1e-2 * ball.pow(2).sum()
+            fc.record_supcon(torch.ones(x.shape[0], dtype=torch.bool), 1.0, 1.0)
             loss_fc = fc.step(model, head[0], images, ball, x.shape[0], epoch, i)
             if loss_fc is not None:
                 loss = loss + loss_fc
@@ -108,6 +126,68 @@ def train_loop(fc, epochs, seed=0, stop_after=None):
         if stop_after is not None and epoch + 1 == stop_after:
             return model, head, merged
     return model, head, merged
+
+
+class NoWriter:
+    def add_scalar(self, *a, **k):
+        pass
+
+    def add_scalars(self, *a, **k):
+        pass
+
+
+def jitter(image):
+    return image + 0.05 * torch.randn_like(image)
+
+
+def build_upstream(tmp_path, monkeypatch, device, epochs, split=True, smoke_frac=0, batch_size=16, **over):
+    """The data path of train/train_HypSelEx.py on FakeCars: upstream's get_scars_datasets and get_datasets, the
+    script's sampler and five loaders (its lines are under __main__, so they are repeated here), and FCRun built as
+    the script builds it. Returns the module, args, model, head, loaders and the datasets dict."""
+    import data.stanford_cars
+    from data.get_datasets import get_datasets
+    monkeypatch.setattr(sys, 'argv', ['pytest'])
+    monkeypatch.setattr(data.stanford_cars, 'CarsDataset', FakeCars)
+    T = importlib.import_module('train.train_HypSelEx')
+    known, novel = list(range(FakeCars.N_KNOWN)), list(range(FakeCars.N_KNOWN, FakeCars.N_CLASSES))
+    ns = argparse.Namespace(dataset_name='scars', train_classes=known, unlabeled_classes=novel, prop_train_labels=0.5,
+                            split_train_val=split, smoke_frac=smoke_frac)
+    train_view = T.ContrastiveLearningViewGenerator(base_transform=jitter, n_views=2)
+    train_dataset, test_dataset, unlabelled_test, datasets = get_datasets('scars', train_view, None, ns)
+    label_len = len(train_dataset.labelled_dataset)
+    unlabelled_len = len(train_dataset.unlabelled_dataset)
+    sample_weights = [1 if i < label_len else label_len / (unlabelled_len + label_len) for i in range(len(train_dataset))]
+    sampler = WeightedRandomSampler(torch.DoubleTensor(sample_weights), num_samples=len(train_dataset))
+    train_dataset_test = copy.deepcopy(train_dataset)
+    train_dataset_test.labelled_dataset.transform = None
+    train_dataset_test.unlabelled_dataset.transform = None
+    loaders = dict(
+        train_loader=DataLoader(train_dataset, batch_size=batch_size, shuffle=False, sampler=sampler, drop_last=True),
+        test_loader=DataLoader(test_dataset, batch_size=batch_size // 2, shuffle=False),
+        unlabelled_train_loader=DataLoader(unlabelled_test, batch_size=batch_size // 2, shuffle=False),
+        merge_train_loader=DataLoader(train_dataset, batch_size=batch_size, shuffle=False),
+        merge_train_loader_test=DataLoader(train_dataset_test, batch_size=batch_size, shuffle=False))
+    settings = dict(run_dir=str(tmp_path / 'run'), epochs=epochs, num_labeled_classes=len(known),
+                    num_unlabeled_classes=len(novel), train_classes=known, unlabeled_classes=novel,
+                    batch_size=batch_size, lr=0.01, momentum=0.9, weight_decay=0.0, strategy='zero_one',
+                    cluster_momentum=1.0, unsupervised_smoothing=1.0, train_report_interval=epochs,
+                    prototype_extraction_interval=1, distance='euclidean', contrast_unlabel_only=False,
+                    sup_con_weight=0.35, n_views=2, temperature=1.0, hyper_start_epoch=0, hyper_end_epoch=epochs,
+                    hyper_max_weight=1.0, writer=NoWriter(), model_path=str(tmp_path / 'model.pt'), eval_funcs=['v2'],
+                    c=0.1, cr=2.0, split_train_val=split, smoke_frac=smoke_frac, fix_label_order=split)
+    args = fc_args(**{**settings, **over})
+    torch.manual_seed(0)
+    model, head = make_model(args)
+    model, head = model.to(device), head.to(device)
+    run = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'), datasets=datasets)
+    for name, value in (('args', args), ('device', device), ('FC_RUN', run)):
+        monkeypatch.setattr(T, name, value, raising=False)      # restored afterwards: other tests share the module
+    return T, args, model, head, loaders, datasets
+
+
+def run_train(T, args, model, head, loaders):
+    T.train(head, model, loaders['train_loader'], loaders['test_loader'], loaders['unlabelled_train_loader'],
+            loaders['merge_train_loader'], loaders['merge_train_loader_test'], args)
 
 
 def write_run(root, run_id, seed, enable, curves, val_acc=None, w_ent=0.03, aperture='A1', variant='v2',
