@@ -24,6 +24,33 @@ def test_loader_order_is_the_identity_when_known_images_come_first():
 
 
 @needs_cuda
+def test_k_means_runs_with_an_int32_arange(monkeypatch):
+    """np.arange is int32 on Windows with NumPy 1.x, int64 on Linux. Forcing int32 reproduces the Windows case on any
+    machine: without the marked cast, the balanced assignment of upstream's K_Means stops on an index put."""
+    import numpy as np
+
+    import methods.clustering.faster_mix_k_means_pytorch as m
+
+    class Int32Numpy:
+        def __getattr__(self, name):
+            return getattr(np, name)
+
+        def arange(self, *a):
+            return np.arange(*a, dtype=np.int32)
+
+    monkeypatch.setattr(m, 'np', Int32Numpy())
+    g = torch.Generator().manual_seed(0)
+    k, per = 6, 10
+    feats = torch.randn(k * per, 8, generator=g).cuda()
+    labelled = torch.arange(k * per) < 2 * per
+    truth = torch.arange(k).repeat_interleave(per)
+    km = m.K_Means(k=k, tolerance=1e-4, max_iterations=4, init='k-means++', n_init=1, random_state=0,
+                   pairwise_batch_size=1024, cluster_size=per)
+    km.fit_mix(feats[~labelled.cuda()], feats[labelled.cuda()], truth[labelled].cuda())
+    assert km.labels_.dtype == torch.int64 and km.labels_.numel() == k * per
+
+
+@needs_cuda
 def test_upstream_fit_mix_returns_known_first_and_the_fix_realigns():
     from methods.clustering.faster_mix_k_means_pytorch import K_Means
     g = torch.Generator().manual_seed(0)

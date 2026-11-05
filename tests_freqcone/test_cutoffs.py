@@ -8,6 +8,7 @@ import torch
 
 from conftest import ROOT, cub_args
 from freqcone.cutoffs import PowerAccumulator, cutoffs_from_power, select_cutoff, snr_curve
+from freqcone.data_checks import item_names
 from freqcone.freqcone_torch import gaussian_blur, radial_lowpass
 
 
@@ -67,5 +68,5 @@ def test_script_uses_training_images_only(fake_cub, monkeypatch):
     assert out['n_images'] == n_train and out['complete']
     assert out['validation_excluded']['n_val'] == len(datasets['val'])
     assert out['f_a'] < out['f_b'] and out['paper_table7'] == {5: 2, 10: 8, 15: 23, 20: 45, 25: 55}
-    ids, _ = mod.cutoff_image_set(train, datasets['val'], range(100))
-    assert not {int(i.split(':')[0]) for i in ids} & {int(i) for i in datasets['val'].uq_idxs}
+    names, _ = mod.cutoff_image_set(train, datasets['val'], range(100))
+    assert len(names) == n_train and not set(names) & set(item_names(datasets['val']))

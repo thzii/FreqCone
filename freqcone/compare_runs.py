@@ -3,14 +3,15 @@
 For every row of summarize_run: per-seed differences FreqCone - baseline of All / Old / New (points), their mean,
 standard deviation and the number of seeds won. Gates and conclusions must pass on BOTH main rows
 ("Chuẩn GCD (theo code HypCD)" and "Epoch cuối"):
-  --gate g1     one seed (pilot): dNew >= +1.0 and dAll >= -0.5, on each main row
-  --gate final  seeds 8-10: mean dNew >= +1.0, wins on New >= 2/3 of the seeds, mean dAll >= -0.5, on each main row
+  --gate g1     one seed (pilot, validation split held out in both arms): dNew >= +1.0 and dAll >= -0.5, on each main row
+  --gate final  seeds 8-10 (no validation split): mean dNew >= +1.0, wins on New >= 2/3 of the seeds, mean dAll >= -0.5,
+                on each main row
 SOTA table: row (1) of each arm, mean ± std over the seeds and every seed, next to HypCD's published Hyp-SelEx
 numbers (one published run). The oracle rows are printed in a separate table titled
 "Oracle (chọn bằng test, tham khảo)". --plot draws the last-epoch-style evaluation (`eval`) per epoch.
 
-usage: python -m freqcone.compare_runs --base runs/base_s8 runs/base_s9 runs/base_s10 \
-           --fc runs/fc_s8 runs/fc_s9 runs/fc_s10 --gate final --plot runs/compare_final.png --out runs/compare_final.json
+usage: python -m freqcone.compare_runs --base runs/B8 runs/B9 runs/B10 \
+           --fc runs/F8 runs/F9 runs/F10 --gate final --plot runs/compare_final.png --out runs/compare_final.json
 """
 import argparse
 import json
@@ -26,6 +27,7 @@ G1_NEW, G1_ALL = 1.0, -0.5
 FINAL_NEW, FINAL_ALL, FINAL_WIN_SHARE = 1.0, -0.5, 2 / 3
 PUBLISHED = {'scars': {'all': 83.8, 'old': 93.3, 'new': 79.2},     # HypCD Table 1, Hyp-SelEx, DINOv2, one run
              'cub': {'all': 90.7, 'old': 85.3, 'new': 93.4}}
+GATE_SPLIT = {'g1': True, 'final': False}        # validation split held out? pilot pair: yes; confirmation runs: no
 SERIES = {'base': ('Baseline (Hyp-SelEx)', '#2a78d6'), 'fc': ('FreqCone', '#eb6834')}   # categorical slots 1, 2
 SURFACE, INK, INK_2, GRID = '#fcfcfb', '#0b0b0b', '#52514e', '#e4e3df'
 
@@ -38,7 +40,17 @@ def pair_up(base_dirs, fc_dirs):
     for s in base:
         if base[s]['run']['freqcone']['enable'] or not fc[s]['run']['freqcone']['enable']:
             raise ValueError(f'seed {s}: --base must be baselines and --fc FreqCone runs')
+        if bool(base[s]['run'].get('split_train_val')) != bool(fc[s]['run'].get('split_train_val')):
+            raise ValueError(f'seed {s}: one arm holds out the validation split and the other does not')
     return [(s, base[s], fc[s]) for s in sorted(base)]
+
+
+def check_gate_runs(pairs, kind):
+    """G1 is about the pilot pair, the final gate about the confirmation runs: refuse the wrong data mode."""
+    want = GATE_SPLIT.get(kind)
+    for s, b, _ in pairs:
+        if want is not None and bool(b['run'].get('split_train_val')) != want:
+            raise ValueError(f"seed {s}: gate {kind} expects runs {'with' if want else 'without'} the validation split")
 
 
 def deltas(pairs):
@@ -46,9 +58,9 @@ def deltas(pairs):
     for key, label, role in ROWS:
         per_seed = []
         for s, b, f in pairs:
-            rb = next(r for r in table(b['val'], b['test']) if r['key'] == key)
-            rf = next(r for r in table(f['val'], f['test']) if r['key'] == key)
-            if rb['all'] is None or rf['all'] is None:
+            rb = next((r for r in table(b['val'], b['test']) if r['key'] == key), None)
+            rf = next((r for r in table(f['val'], f['test']) if r['key'] == key), None)
+            if rb is None or rf is None or rb['all'] is None or rf['all'] is None:
                 continue
             per_seed.append({'seed': s, 'epoch_base': rb['epoch'], 'epoch_fc': rf['epoch'],
                              **{m: 100 * (rf[m] - rb[m]) for m in ('all', 'old', 'new')},
@@ -101,7 +113,8 @@ def markdown(d, g=None, dataset='scars'):
                          f"{f(st['old']['mean'])} ± {s(st['old']['std'])} | {f(st['new']['mean'])} ± {s(st['new']['std'])} | "
                          f"{st['new']['wins']}/{st['new']['n']} | {st['new']['n']} |")
         return lines
-    lines = block(list(MAIN) + ['best_val'], 'FreqCone − baseline theo cặp seed (điểm %)') + ['']
+    rows_shown = list(MAIN) + (['best_val'] if d['best_val']['per_seed'] else [])
+    lines = block(rows_shown, 'FreqCone − baseline theo cặp seed (điểm %)') + ['']
     for k in MAIN:
         lines += [f"Theo từng seed, hàng \"{d[k]['label']}\":", '',
                   '| Seed | Epoch base / FreqCone | Base All/Old/New | FreqCone All/Old/New | ΔAll | ΔOld | ΔNew |',
@@ -211,6 +224,7 @@ def main(argv=None):
     except LockError as e:
         print(f'refused: {e}', file=sys.stderr)
         return 2
+    check_gate_runs(pairs, a.gate)
     d = deltas(pairs)
     g = gate(d, a.gate) if a.gate != 'none' else None
     dataset = pairs[0][1]['run'].get('dataset', 'scars')

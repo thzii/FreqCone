@@ -179,7 +179,8 @@ def build_upstream(tmp_path, monkeypatch, device, epochs, split=True, smoke_frac
     torch.manual_seed(0)
     model, head = make_model(args)
     model, head = model.to(device), head.to(device)
-    run = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'), datasets=datasets)
+    run = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'), datasets=datasets,
+                train_copies=(train_dataset_test, unlabelled_test))
     for name, value in (('args', args), ('device', device), ('FC_RUN', run)):
         monkeypatch.setattr(T, name, value, raising=False)      # restored afterwards: other tests share the module
     return T, args, model, head, loaders, datasets
@@ -191,7 +192,7 @@ def run_train(T, args, model, head, loaders):
 
 
 def write_run(root, run_id, seed, enable, curves, val_acc=None, w_ent=0.03, aperture='A1', variant='v2',
-              val=None, epochs=None, disjoint_old=None, gcd=None):
+              val=None, epochs=None, disjoint_old=None, gcd=None, split_train_val=True):
     """A synthetic run directory: run.json (no test numbers) and the two JSONL files.
     curves: all/old/new per epoch of the per-epoch evaluation (`eval`, fractions); gcd: same layout for upstream's
     training-set numbers (default: curves); disjoint_old: Old on the disjoint test split (default: curves['old'])."""
@@ -200,7 +201,7 @@ def write_run(root, run_id, seed, enable, curves, val_acc=None, w_ent=0.03, aper
     n = len(curves['all']) if epochs is None else epochs
     gcd = gcd or curves
     rec = {'schema': SCHEMA, 'run_id': run_id, 'seed': seed, 'dataset': 'scars', 'base_method': 'Hyp-SelEx',
-           'c': 0.1, 'r': 2.0, 'epochs': n, 'fix_label_order': True, 'split_train_val': True,
+           'c': 0.1, 'r': 2.0, 'epochs': n, 'fix_label_order': True, 'split_train_val': split_train_val,
            'freqcone': {'enable': enable, 'variant': variant if enable else None, 'w_ent': w_ent, 'aperture': aperture},
            'val': val}
     with open(os.path.join(d, 'run.json'), 'w') as f:

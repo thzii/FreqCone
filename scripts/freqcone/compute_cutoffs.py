@@ -26,7 +26,7 @@ import torch  # noqa: E402
 from torch.utils.data import DataLoader  # noqa: E402
 
 from freqcone.cutoffs import CITATION, DEFINITION, LEVELS_DB, PAPER_TABLE7, PowerAccumulator, cutoffs_from_power  # noqa: E402
-from freqcone.data_checks import check_val_split, item_ids, list_sha256  # noqa: E402
+from freqcone.data_checks import check_val_split, item_names, list_sha256  # noqa: E402
 from freqcone.datasets import build_args, set_root  # noqa: E402
 
 HANDOFF = {'scars': (3, 11)}          # values written in the handoff, never verified
@@ -36,11 +36,10 @@ README_START, README_END = '<!-- cutoffs:start -->', '<!-- cutoffs:end -->'
 def cutoff_image_set(train, val, known_classes):
     """Identity of the images the cut-offs are computed from; raises if a validation image is among them."""
     split = check_val_split(train.labelled_dataset, train.unlabelled_dataset, val, known_classes)
-    ids = item_ids(train.labelled_dataset) + item_ids(train.unlabelled_dataset)
-    used = {int(i.split(':', 1)[0]) for i in ids}
-    if used & {int(i) for i in val.uq_idxs}:
+    names = item_names(train.labelled_dataset) + item_names(train.unlabelled_dataset)
+    if set(names) & set(item_names(val)):
         raise AssertionError('a validation image would enter the cut-off computation')
-    return ids, split
+    return names, split
 
 
 def compute(name, device, batch_size=64, num_workers=4, max_images=0):

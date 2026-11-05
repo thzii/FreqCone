@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from conftest import cub_args
-from freqcone.data_checks import check_val_split, item_ids, keep_every, list_sha256, raw_targets
+from freqcone.data_checks import check_val_split, file_tail, item_names, keep_every, list_sha256, raw_targets
 
 
 def build(args):
@@ -79,12 +79,22 @@ def test_checks_catch_overlap_and_novel_classes(fake_cub):
 
 def test_ids_and_smoke_subsample(fake_cub):
     train, datasets = build(cub_args())
-    ids = item_ids(datasets['val'])
-    assert ids[0].split(':', 1)[1].endswith('.jpg') and list_sha256(ids) == list_sha256(list(reversed(ids)))
+    names = item_names(datasets['val'])
+    assert names[0].endswith('.jpg') and list_sha256(names) == list_sha256(list(reversed(names)))
     per_class = np.bincount(raw_targets(datasets['val']))
     small = keep_every(datasets['val'], 2, 'cub')
     assert len(small) == sum((n + 1) // 2 for n in per_class)                # every 2nd image within each class
     assert set(raw_targets(small).tolist()) == set(np.nonzero(per_class)[0].tolist())
+
+
+def test_list_sha_is_about_the_files_not_the_numbering_or_the_machine(fake_cub):
+    train, datasets = build(cub_args())
+    val = datasets['val']
+    before = check_val_split(train.labelled_dataset, train.unlabelled_dataset, val, range(100))['val_list_sha256']
+    val.uq_idxs = val.uq_idxs + 1000000
+    assert check_val_split(train.labelled_dataset, train.unlabelled_dataset, val, range(100))['val_list_sha256'] == before
+    assert file_tail('/data/cars/cars_train/00001.jpg') == file_tail('C:\\data\\cars\\cars_train/00001.jpg') \
+        == 'cars_train/00001.jpg'
 
 
 def test_smoke_flag_shrinks_every_split(fake_cub):

@@ -27,8 +27,9 @@ def test_resolution_and_level(tmp_path):
     assert d['level'] == 'A'                                                  # 200 x 175 s = 9.7 h <= 10 h
     assert d['gpu_hours']['A'] == pytest.approx(200 * (4 * 100 + 6 * 175) / 3600)
     assert d['gpu_hours']['B'] == pytest.approx(200 * (3 * 100 + 3 * 175) / 3600)
-    assert set(d['planned_hours']) == {'R0', 'R1', 'R2', 'R3', 'base_s8', 'base_s9', 'base_s10', 'fc_s8', 'fc_s9',
-                                       'fc_s10', 'R0-repro'}
+    assert set(d['planned_hours']) == {'B8', 'R0', 'R1', 'R2', 'R3', 'B9', 'B10', 'F8', 'F9', 'F10', 'R0-repro'}
+    assert [r for r, _ in pt.LEVEL_RUNS['A']] == ['B8', 'R0', 'R1', 'R2', 'R3', 'B9', 'B10', 'F8', 'F9', 'F10']
+    assert [r for r, _ in pt.LEVEL_RUNS['B']] == ['B8', 'F8', 'B9', 'F9', 'B10', 'F10']
     probe(tmp_path, 'fc224', 185.0)                                           # 1.85 x: too slow -> 112 px
     d = pt.decide(str(tmp_path))
     assert d['resolution'] == 112 and d['coarse_res_flag'] == 112 and d['level'] == 'A'
@@ -37,7 +38,7 @@ def test_resolution_and_level(tmp_path):
     probe(tmp_path, 'lowmem', 150.0)
     probe(tmp_path, 'fc224', 200.0)                                           # 200 x 200 s = 11.1 h > 10 h -> level B
     d = pt.decide(str(tmp_path))
-    assert d['level'] == 'B' and 'R1' not in d['planned_hours'] and 'fc_s8' in d['planned_hours']
+    assert d['level'] == 'B' and 'R1' not in d['planned_hours'] and 'F8' in d['planned_hours']
 
 
 def test_decision_requires_the_probes(tmp_path):
@@ -58,10 +59,10 @@ def test_readme_section_is_replaced(tmp_path):
     assert 'old' not in text and '**224 px**' in text and '**Mức A**' in text and text.endswith('tail\n')
 
 
-def g0_run(root, run_id='R0', all_at_up=0.830, enable=False, **over):
-    d = write_run(root, run_id, over.pop('seed', 7), enable,
+def g0_run(root, run_id='B8', all_at_up=0.830, enable=False, **over):
+    d = write_run(root, run_id, over.pop('seed', 8), enable,
                   {'all': [0.70, all_at_up, 0.80], 'old': [0.9, 0.93, 0.92], 'new': [0.6, 0.78, 0.74]},
-                  val_acc=[0.5, 0.6, 0.7], disjoint_old=[0.80, 0.95, 0.90])
+                  disjoint_old=[0.80, 0.95, 0.90], split_train_val=over.pop('split_train_val', False))
     rec = json.loads(open(os.path.join(d, 'run.json')).read())
     rec.update(over)
     with open(os.path.join(d, 'run.json'), 'w') as f:
@@ -81,6 +82,27 @@ def test_g0(tmp_path):
     assert pt.g0(repro)['passed']
     bad = g0_run(tmp_path / 'h', run_id='R0-repro', fix_label_order=True, split_train_val=False, seed=1)
     assert not pt.g0(bad)['passed']
+
+
+def test_g0_is_about_b8_on_all_the_labelled_images(tmp_path):
+    assert pt.g0(g0_run(tmp_path / 'a'))['problems'] == []
+    held_out = pt.g0(g0_run(tmp_path / 'b', split_train_val=True))
+    assert not held_out['passed'] and 'no validation split' in held_out['problems'][0]
+    assert not pt.g0(g0_run(tmp_path / 'c', run_id='R0', seed=7, split_train_val=True))['passed']
+    assert not pt.g0(g0_run(tmp_path / 'd', run_id='R0', seed=7))['passed']
+    assert not pt.g0(g0_run(tmp_path / 'e', seed=9))['passed']
+    assert not pt.g0(g0_run(tmp_path / 'f', fix_label_order=False))['passed']
+    repro = pt.g0(g0_run(tmp_path / 'g', run_id='R0-repro', seed=1, fix_label_order=False, split_train_val=True))
+    assert not repro['passed']
+
+
+@pytest.mark.parametrize('run_id, split, ok', [('R0', True, True), ('R3', True, True), ('R2', False, False),
+                                               ('B8', False, True), ('F10', False, True), ('B9', True, False),
+                                               ('F8', True, False), ('smoke_base', True, True), ('R0-repro', False, True)])
+def test_run_check_enforces_the_data_mode(tmp_path, run_id, split, ok):
+    write_run(tmp_path, run_id, 7, False, {'all': [.5], 'old': [.5], 'new': [.5]}, split_train_val=split)
+    errs = ' '.join(pt.check_run_dir(str(tmp_path / run_id)))
+    assert ('validation split' in errs) == (not ok)
 
 
 def test_budget_overrun(tmp_path):
@@ -108,6 +130,9 @@ def repo(tmp_path):
     (root / 'cutoffs.json').write_text('{}')
     os.makedirs(root / 'runs' / 'profile_scars')
     (root / 'runs' / 'profile_scars' / 'decision.json').write_text('{}')
+    for name in ('runs/data_report_scars.json', 'runs/uq_map_scars.csv', 'docs/DATA_CHECK.md'):
+        os.makedirs(root / os.path.dirname(name), exist_ok=True)
+        (root / name).write_text('x')
     git(root, 'add', '-A')
     git(root, 'commit', '-q', '-m', 'init')
     git(root, 'tag', 'pilot-v2')
@@ -126,6 +151,12 @@ def test_preflight(repo, monkeypatch):
     (repo / 'cutoffs.json').write_text('{"scars": 1}')
     assert any('cutoffs.json' in p for p in pt.preflight(runs, decision, smoke))
     git(repo, 'checkout', '-q', '--', 'cutoffs.json')
+    git(repo, 'rm', '-q', '--cached', 'docs/DATA_CHECK.md')
+    git(repo, 'commit', '-q', '-m', 'without the data check')
+    assert any('DATA_CHECK.md' in p for p in pt.preflight(runs, decision, smoke))
+    git(repo, 'add', 'docs/DATA_CHECK.md')
+    git(repo, 'commit', '-q', '-m', 'data check back')
+    git(repo, 'tag', '-f', 'pilot-v2')
     os.makedirs(repo / 'runs' / 'R0')
     (repo / 'runs' / 'R0' / 'run.json').write_text('{}')
     (repo / 'runs' / 'selection.json').write_text('{}')

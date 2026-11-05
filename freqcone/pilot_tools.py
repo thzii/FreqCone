@@ -5,6 +5,7 @@
   python -m freqcone.pilot_tools g0 RUN_DIR                   reproduction gate G0 (3.3)
   python -m freqcone.pilot_tools budget RUNS_ROOT DECISION    stop when runs take > 30 % longer than planned
   python -m freqcone.pilot_tools preflight RUNS_ROOT DECISION tagged code, locked inputs, no smoke results
+  python -m freqcone.pilot_tools env                          pinned kmeans_pytorch build
 Exit status 0 = pass; anything else = stop and report.
 """
 import argparse
@@ -26,8 +27,10 @@ REQUIRED_FC = ['enable', 'variant', 'w_dir', 'w_ent', 'w_con', 'K', 'r_a', 'r_b'
 REQUIRED_COST = ['time_per_epoch_s', 'peak_mem_gb']
 REQUIRED_VAL_LINE = ['epoch', 'val_acc', 'losses', 'sup_con', 'fc', 'lr', 'time_s']
 REQUIRED_DATA_COUNTS = ['n_labelled', 'n_unlabelled', 'n_val', 'n_test_roi', 'labelled_per_known_min',
-                        'labelled_per_known_max']
+                        'labelled_per_known_max', 'uq_gaps_closed', 'uq_map_sha256']
 REQUIRED_DIAG = ['depth_full', 'in_cone', 'clip_frac', 'angle_b_u']
+PILOT_RUNS = ('R0', 'R1', 'R2', 'R3')                                # validation split held out, for the selection
+CONFIRMATION_RUNS = ('B8', 'B9', 'B10', 'F8', 'F9', 'F10')           # 100 % of the labelled images, as upstream
 
 
 def _has_test_numbers(obj):
@@ -49,6 +52,10 @@ def check_run_dir(run_dir, profile=False):
     errs = [f'missing {k}' for k in REQUIRED_TOP if k not in rec]
     errs += [f'missing freqcone.{k}' for k in REQUIRED_FC if k not in (rec.get('freqcone') or {})]
     errs += [f'missing cost.{k}' for k in REQUIRED_COST if k not in (rec.get('cost') or {})]
+    if rec.get('run_id') in PILOT_RUNS and not rec.get('split_train_val'):
+        errs.append('a pilot run holds out the validation split')
+    if rec.get('run_id') in CONFIRMATION_RUNS and rec.get('split_train_val'):
+        errs.append('a confirmation run uses 100 % of the labelled images (no validation split)')
     if _has_test_numbers(rec):
         errs.append('run.json holds test numbers (they belong in epochs_test.jsonl only)')
     if profile:
@@ -96,11 +103,10 @@ def check_run_dir(run_dir, profile=False):
 
 # ---------------------------------------------------------------------------------------------- 3.1-3.2 decision
 RATIO_MAX, LEVEL_A_MAX_RUN_H, EPOCHS = 1.8, 10.0, 200
-LEVEL_RUNS = {   # (run id, arm); R0-repro is conditional on G0 and listed apart
-    'A': [('R0', 'base'), ('R1', 'fc'), ('R2', 'fc'), ('R3', 'fc'), ('base_s8', 'base'), ('base_s9', 'base'),
-          ('base_s10', 'base'), ('fc_s8', 'fc'), ('fc_s9', 'fc'), ('fc_s10', 'fc')],
-    'B': [('base_s8', 'base'), ('base_s9', 'base'), ('base_s10', 'base'), ('fc_s8', 'fc'), ('fc_s9', 'fc'),
-          ('fc_s10', 'fc')],
+LEVEL_RUNS = {   # (run id, arm) in running order; R0-repro is conditional on G0 and listed apart
+    'A': [('B8', 'base'), ('R0', 'base'), ('R1', 'fc'), ('R2', 'fc'), ('R3', 'fc'), ('B9', 'base'), ('B10', 'base'),
+          ('F8', 'fc'), ('F9', 'fc'), ('F10', 'fc')],
+    'B': [('B8', 'base'), ('F8', 'fc'), ('B9', 'base'), ('F9', 'fc'), ('B10', 'base'), ('F10', 'fc')],
 }
 README_START, README_END = '<!-- pilot-decision:start -->', '<!-- pilot-decision:end -->'
 
@@ -188,9 +194,13 @@ def g0(run_dir):
         problems.append('G0 is checked on a baseline run')
     if (rec.get('c'), rec.get('r')) != UPSTREAM_CR.get(rec.get('dataset')):
         problems.append(f"c, r = {rec.get('c')}, {rec.get('r')}; upstream uses {UPSTREAM_CR.get(rec.get('dataset'))}")
-    if rec.get('run_id') == 'R0-repro' and (rec.get('fix_label_order') or rec.get('split_train_val')
-                                            or rec.get('seed') != UPSTREAM_SEED):
+    if rec.get('split_train_val'):
+        problems.append('G0 compares with published numbers, which use 100 % of the labelled images: no validation split')
+    if rec.get('run_id') == 'R0-repro' and (rec.get('fix_label_order') or rec.get('seed') != UPSTREAM_SEED):
         problems.append('R0-repro must be upstream as is: label-order bug kept, no validation split, seed 1')
+    if rec.get('run_id') != 'R0-repro' and (rec.get('run_id') != 'B8' or not rec.get('fix_label_order')
+                                            or rec.get('seed') != 8):
+        problems.append('G0 is checked on B8: baseline, seed 8, label-order fix (R0-repro if that fails)')
     rows = {r['key']: r for r in table(read_jsonl(os.path.join(run_dir, 'epochs_val.jsonl')),
                                        read_jsonl(os.path.join(run_dir, 'epochs_test.jsonl')))}
     up, last = rows['gcd'], rows['last']
@@ -208,6 +218,8 @@ def g0(run_dir):
 
 # ---------------------------------------------------------------------------------------------- budget, preflight
 BUDGET_SLACK = 1.3
+KMEANS_COMMIT = 'f7f36bd1cb4e3a761d73d584866d0a9c6b4d2805'      # master, 2022-03-31: the build upstream's README installs
+KMEANS_INSTALL = f'git+https://github.com/subhadarship/kmeans_pytorch@{KMEANS_COMMIT}'
 
 
 def budget(runs_root, decision):
@@ -230,20 +242,37 @@ def _git(*cmd):
     return res.returncode, res.stdout.strip()
 
 
+def kmeans_commit():
+    """Commit pip recorded for the installed kmeans_pytorch (direct_url.json, PEP 610). None for a PyPI, editable or
+    copied install."""
+    from importlib.metadata import PackageNotFoundError, distribution
+    try:
+        recorded = distribution('kmeans_pytorch').read_text('direct_url.json')
+    except PackageNotFoundError:
+        return None
+    return (json.loads(recorded).get('vcs_info') or {}).get('commit_id') if recorded else None
+
+
 def check_environment():
     """Problems that would otherwise surface only after the first training epoch."""
     import inspect
 
     from kmeans_pytorch import kmeans
-    if 'tqdm_flag' in inspect.signature(kmeans).parameters:
-        return []
-    return ["kmeans_pytorch has no tqdm_flag, which upstream's test_kmeans passes: the PyPI build is too old. Install "
-            "it from https://github.com/subhadarship/kmeans_pytorch (docs/UPSTREAM_README.md, README section 2)"]
+    problems = []
+    if 'tqdm_flag' not in inspect.signature(kmeans).parameters:
+        problems.append("kmeans_pytorch has no tqdm_flag, which upstream's test_kmeans passes: this is the PyPI build")
+    commit = kmeans_commit()
+    if commit != KMEANS_COMMIT:
+        problems.append(f'kmeans_pytorch is not the pinned build: installed from {commit or "no recorded commit"}, '
+                        f'expected {KMEANS_COMMIT}')
+    if problems:
+        problems.append(f'install it with: pip install --force-reinstall --no-deps "{KMEANS_INSTALL}" (README section 2)')
+    return problems
 
 
 def preflight(runs_root, decision_path, smoke_dir):
     """Code = the latest pilot-v* tag (commits after it may only touch results under RUNS_ROOT); config.py may
-    hold local paths; cutoffs.json and the decision committed and unchanged; no smoke results."""
+    hold local paths; the cut-offs, the decision and the data check committed and unchanged; no smoke results."""
     problems = []
     runs_rel = os.path.relpath(os.path.abspath(runs_root), REPO_ROOT).replace('\\', '/').rstrip('/') + '/'
     code, tag = _git('describe', '--tags', '--abbrev=0', '--match', 'pilot-v*')
@@ -258,7 +287,9 @@ def preflight(runs_root, decision_path, smoke_dir):
     extra = [m for m in modified.split('\n') if m and m != 'config.py']
     if extra:
         problems.append(f'tracked files modified besides config.py: {extra}')
-    for path in ('cutoffs.json', decision_path):
+    data_check = (os.path.join(runs_root, 'data_report_scars.json'), os.path.join(runs_root, 'uq_map_scars.csv'),
+                  'docs/DATA_CHECK.md')
+    for path in ('cutoffs.json', decision_path) + data_check:
         rel = os.path.relpath(os.path.abspath(path), REPO_ROOT).replace('\\', '/')
         if _git('ls-files', '--error-unmatch', rel)[0] or _git('diff', '--quiet', 'HEAD', '--', rel)[0]:
             problems.append(f'{rel} is not committed or changed since its commit')

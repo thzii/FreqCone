@@ -41,21 +41,21 @@ def test_isolated_rng_restores_every_generator():
 
 
 def test_records_keep_test_numbers_out_of_run_json(tmp_path):
-    args = fc_args(freqcone=True, run_dir=str(tmp_path / 'R1'), eval_every_epoch=True, epochs=2, run_id='R1')
+    args = fc_args(freqcone=True, run_dir=str(tmp_path / 'F8'), eval_every_epoch=True, epochs=2, run_id='F8')
     fc = FCRun(args, torch.device('cpu'))
     model, head, merged = train_loop(fc, epochs=2)
     fc.final_eval(model, head, merged, lambda m, l, a: {'all_acc': 0.5, 'old_acc': 0.6, 'new_acc': 0.4})
-    rec = json.loads((tmp_path / 'R1' / 'run.json').read_text())
+    rec = json.loads((tmp_path / 'F8' / 'run.json').read_text())
     assert not _has_test_numbers(rec)
-    tests = [json.loads(l) for l in (tmp_path / 'R1' / 'epochs_test.jsonl').read_text().splitlines()]
-    vals = [json.loads(l) for l in (tmp_path / 'R1' / 'epochs_val.jsonl').read_text().splitlines()]
+    tests = [json.loads(l) for l in (tmp_path / 'F8' / 'epochs_test.jsonl').read_text().splitlines()]
+    vals = [json.loads(l) for l in (tmp_path / 'F8' / 'epochs_val.jsonl').read_text().splitlines()]
     assert [t['epoch'] for t in tests] == [1, 2] == [v['epoch'] for v in vals]
     assert set(tests[0]) == {'epoch', 'gcd', 'disjoint_test', 'eval'}
     assert tests[0]['gcd']['source'] == 'ss_kmeans_epoch_start' and tests[0]['gcd']['weights_after_epoch'] == 0
     assert all(set(t['eval']) == {'all', 'old', 'new'} for t in tests)
     assert not any(k in json.dumps(vals) for k in ('"all"', '"old"', '"new"'))
     assert vals[-1]['fc']['depth_b'] == pytest.approx(1.282, abs=1e-3) and vals[-1]['fc']['in_cone'] is not None
-    assert check_run_dir(str(tmp_path / 'R1')) == []
+    assert check_run_dir(str(tmp_path / 'F8')) == []
 
 
 def test_resume_continues_exactly(tmp_path):

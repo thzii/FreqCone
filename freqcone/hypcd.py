@@ -8,7 +8,8 @@ tests_freqcone/test_upstream_equivalence.py checks that deleting the marked bloc
 files byte for byte, and that these defaults leave every hook inactive.
 
 Held-out images leave gaps in uq_idxs, which upstream's pseudo-label lookup cannot take: FCRun renumbers the merged
-training set (data_checks.compact_uq_idxs) and checks it before training and before every SS-k-means (check_data).
+training set and its copies (data_checks.compact_uq_idxs) and checks them before training and before every SS-k-means
+(check_data).
 
 Outputs of a run (--run_dir runs/<run_id>):
   run.json            setting, provenance, checksums, image counts per split (data_counts), validation result of
@@ -47,7 +48,8 @@ import torch
 import torch.nn.functional as F
 
 from data.data_utils import MergedDataset
-from freqcone.data_checks import check_merged_train, check_val_split, compact_uq_idxs, item_ids, list_sha256
+from freqcone.data_checks import (check_merged_train, check_uq_lookup, check_val_split, compact_uq_idxs, item_names,
+                                  list_sha256, uq_map_sha256)
 from freqcone.freqcone_torch import (APERTURES, FreqConeLoss, aperture, cone_energy, depth, radial_lowpass,
                                      scaled_depth, to_fixed_depth)
 
@@ -109,7 +111,7 @@ def add_args(parser):
                    help='keep test accuracies out of stdout and TensorBoard (they still go to epochs_test.jsonl)')
     g.add_argument('--resume', type=str2bool, default=False, help='continue from RUN_DIR/ckpt_resume.pt')
     g.add_argument('--profile_steps', type=int, default=0, help='>0: train N steps of one epoch, record time and memory')
-    g.add_argument('--run_id', type=str, default='', help='run id, e.g. R0 .. R3, base_s8, fc_s8, R0-repro')
+    g.add_argument('--run_id', type=str, default='', help='run id, e.g. R0 .. R3, B8 .. B10, F8 .. F10, R0-repro')
     g.add_argument('--run_tag', type=str, default='', help='free-form run name')
     g.add_argument('--run_attempt', type=int, default=1, help='1 + number of earlier interrupted attempts')
     return parser
@@ -222,7 +224,7 @@ INERT = _Inert()
 
 
 class FCRun:
-    def __init__(self, args, device, train_dataset=None, val_dataset=None, datasets=None):
+    def __init__(self, args, device, train_dataset=None, val_dataset=None, datasets=None, train_copies=()):
         self.args, self.device = args, device
         self.profiling = args.profile_steps > 0
         self.enabled = bool(args.freqcone or args.run_dir or self.profiling)
@@ -253,7 +255,7 @@ class FCRun:
         self.data_lists = self._data_lists(datasets) if (self.enabled and datasets) else None
         self.data_counts = None
         if train_dataset is not None and (self.enabled or args.split_train_val or args.smoke_frac):
-            self.data_counts = self._prepare_training_data(train_dataset, datasets or {})
+            self.data_counts = self._prepare_training_data(train_dataset, datasets or {}, train_copies)
         self.kmeans_cls = None           # tests inject a CPU stand-in; None = upstream K_Means (needs CUDA)
         self.command = _command()
         self.history, self.diagnostics, self.epoch_times, self.eval_times = [], [], [], []
@@ -287,10 +289,10 @@ class FCRun:
             if ds is None:
                 continue
             try:
-                ids = item_ids(ds)
+                names = item_names(ds)
             except TypeError:
                 continue
-            out[key] = {'n': len(ids), 'sha256': list_sha256(ids)}
+            out[key] = {'n': len(names), 'sha256': list_sha256(names)}
         return out
 
     # ------------------------------------------------------------------ output hygiene
@@ -310,25 +312,27 @@ class FCRun:
             self.args.writer = _QuietWriter(self.args.writer)
 
     # ------------------------------------------------------------------ training-time hooks
-    def _prepare_training_data(self, train_dataset, datasets):
-        """Before training: the checks of check_data, then close the gaps that held-out images leave in uq_idxs. The
-        loaders read the same dataset objects, so upstream's lookup sees the new ids. merge_train_loader_test keeps
-        the original ids: upstream never looks anything up with them."""
+    def _prepare_training_data(self, train_dataset, datasets, copies=()):
+        """Before training: the checks of check_data, then close the gaps that held-out images leave in uq_idxs, in
+        the training set and in its copies (train_dataset_test, unlabelled_train_examples_test). The loaders read
+        these same objects, so all of them see the new ids."""
         counts = check_merged_train(train_dataset, self.args.train_classes)
-        gaps = compact_uq_idxs(train_dataset.labelled_dataset, train_dataset.unlabelled_dataset)
+        gaps = compact_uq_idxs(train_dataset.labelled_dataset, train_dataset.unlabelled_dataset, copies)
         val, test = datasets.get('val'), datasets.get('test')
         counts.update(n_val=None if val is None else len(val), n_test_roi=None if test is None else len(test),
-                      uq_gaps_closed=gaps)
+                      uq_gaps_closed=gaps, uq_map_sha256=uq_map_sha256(train_dataset))
         print(f'[FreqCone] data: {json.dumps(counts)}')
         return counts
 
     def check_data(self, loader):
         """Before every SS-k-means (upstream's extract_labeled_protos and test(), each with its merged loader). Stops
-        the run if SS-k-means would get no labelled anchors or incomplete ones, or if the validation split leaked."""
+        the run if SS-k-means would get no labelled anchors or incomplete ones, if the pseudo-label lookup would reach
+        the wrong images, or if the validation split leaked."""
         merged = loader.dataset
         if not isinstance(merged, MergedDataset):
             raise AssertionError(f'SS-k-means needs a MergedDataset loader, got {type(merged).__name__}')
         check_merged_train(merged, self.args.train_classes)
+        check_uq_lookup(merged)
         if self.split is not None:
             check_val_split(merged.labelled_dataset, merged.unlabelled_dataset, self.val_dataset, self.args.train_classes)
 

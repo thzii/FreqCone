@@ -13,7 +13,8 @@ TWO MAIN ROWS (epochs are 1-based):
   last  "Epoch cuối" -- upstream test() (SS-k-means, test transform) on the weights after the last epoch
         (`eval`); no epoch is chosen at all. Robustness check.
 SECONDARY
-  best_val  epoch with the highest validation accuracy (ties: later epoch), its `eval` numbers.
+  best_val  epoch with the highest validation accuracy (ties: later epoch), its `eval` numbers. Pilot runs only: the
+            confirmation runs (B8-B10, F8-F10) hold out no validation split, so their tables do not have this row.
 ORACLE (printed in a separate table, reference only, never for SOTA comparison or conclusions)
   oracle_all / oracle_old / oracle_new: the epoch with the highest `eval` All / Old / New (ties: first epoch). Each
   metric comes from a different epoch chosen on the test split, so the numbers are inflated.
@@ -79,7 +80,8 @@ def table(val_lines, test_lines):
     add('last', tests[-1] if tests and tests[-1].get('eval') else None, 'eval')
     best_val = _argmax([t for t in with_eval if t['epoch'] in vals],
                        lambda t: vals[t['epoch']].get('val_acc'), prefer_later=True)
-    add('best_val', best_val, 'eval')
+    if best_val is not None:
+        add('best_val', best_val, 'eval')
     for key, m in (('oracle_all', 'all'), ('oracle_old', 'old'), ('oracle_new', 'new')):
         add(key, _argmax(with_eval, lambda t, m=m: t['eval'][m]), 'eval')
     return rows

@@ -90,13 +90,13 @@ Nội dung còn dùng của gói cũ được chuyển vào thành thư mục co
 - Trên máy 3090:
 
   ```bash
-  git clone git@github.com:<tài-khoản>/freqcone.git && cd freqcone
-  git checkout <tag mới nhất: pilot-v1.2, hoặc pilot-v2 sau khi profile>
-  git rev-parse HEAD     # kiểm hash
+  git clone https://github.com/thzii/FreqCone.git freqcone && cd freqcone     # nhánh main
+  git describe --tags --exact-match     # tag mới nhất: pilot-v1.4, hoặc pilot-v2 sau khi profile
+  git rev-parse HEAD                    # kiểm hash
   ```
 
 - `git bundle` chỉ còn là phương án dự phòng, khi máy 3090 không truy cập được GitHub.
-- Sau mỗi mốc trên 3090 (`cutoffs.json`, quyết định profile, `selection.json`, kết quả), commit trên 3090, push lên `origin`, rồi `git pull` trên máy này.
+- Sau mỗi mốc trên 3090 (`cutoffs.json`, quyết định profile, `selection.json`, kết quả), commit trên 3090 ở nhánh `main`, chạy `git push origin main --tags`, rồi pull trên máy này.
 
 ## 1. Dọn workspace (an toàn, có kiểm kê)
 
@@ -162,12 +162,14 @@ Cách làm bắt buộc, vì xóa nhầm là không lấy lại được:
 
 | Cách chọn epoch | Epoch | All | Old (Known) | New (Novel) | Vai trò |
 | --- | --- | --- | --- | --- | --- |
-| Epoch cuối (200) | 200 | | | | **KẾT QUẢ CHÍNH** |
-| Epoch có val cao nhất | e_val | | | | kết quả phụ, hợp lệ (chọn bằng val) |
-| Tiêu chí upstream: Old cao nhất trên test | e_up | | | | chỉ để đối chiếu số công bố (G0) |
+| Chuẩn GCD (theo code HypCD): epoch upstream chọn bằng Old trên test rời | e_up | | | | **CHÍNH (1):** so số công bố / SOTA, G0 |
+| Epoch cuối (200) | 200 | | | | **CHÍNH (2):** độ vững, không chọn epoch |
+| Epoch có val cao nhất | e_val | | | | kết quả phụ, hợp lệ (chọn bằng val). **Chỉ có ở pilot** |
 | Oracle: max All | e1 | | | | **oracle, chọn bằng test, không dùng để kết luận** |
 | Oracle: max Old | e2 | | | | oracle |
 | Oracle: max New | e3 | | | | oracle |
+
+Run xác nhận (mục 3.2) không tách val nên bảng của chúng chỉ có hai hàng chính và các hàng oracle.
 
 Ba hàng oracle là cách lọc "epoch có All/Known/Novel cao nhất" theo yêu cầu của người dùng. Chúng được báo cáo đầy đủ nhưng **luôn kèm nhãn oracle**, vì:
 - mỗi chỉ số lấy ở một epoch khác nhau;
@@ -178,7 +180,7 @@ Hai điều này làm số bị thổi phồng, và reviewer sẽ không chấp 
 ### 2.3 `compare_runs.py`: baseline so với FreqCone theo cặp seed
 - Tính ΔAll, ΔOld, ΔNew cho **từng hàng** của bảng 2.2.
 - Báo trung bình, độ lệch chuẩn và số seed thắng.
-- Mọi cổng và mọi kết luận (mục 3) **chỉ dùng hàng "Epoch cuối"**. Hàng "val cao nhất" là kết quả phụ. Các hàng oracle in ở bảng riêng, có tiêu đề "Oracle (chọn bằng test, tham khảo)".
+- G1 và kết luận cuối (mục 3) phải đạt trên **cả hai hàng chính**; G0 xét trên hàng "Chuẩn GCD". Hàng "val cao nhất" là kết quả phụ, chỉ có ở pilot. Các hàng oracle in ở bảng riêng, có tiêu đề "Oracle (chọn bằng test, tham khảo)".
 - Thêm biểu đồ All/Old/New theo epoch cho baseline và FreqCone (trung bình các seed) để thấy độ ổn định. Script chỉ đọc JSONL.
 
 ---
@@ -201,32 +203,42 @@ Hai điều này làm số bị thổi phồng, và reviewer sẽ không chấp 
 
 ### 3.2 Hai mức ngân sách (chọn một sau khi profile; ghi lý do)
 
+**Val chỉ dùng để chọn cấu hình.**
+- Pilot (seed 7: R0, R1–R3) có tách val, để chọn cấu hình bằng luật 1-SE và xét G1. So sánh trong pilot vẫn công bằng vì cả hai nhánh cùng tách val.
+- Các run xác nhận (seed 8, 9, 10, cả baseline lẫn FreqCone) **không tách val**: dùng 100 % ảnh labelled như upstream, cấu hình FreqCone lấy từ `selection.json`. **Lý do: so được với số công bố, vì upstream dùng 100 % labelled.**
+- G0 chạy trên baseline seed 8 không tách val (có `--fix_label_order`), và chạy **đầu tiên**, trước pilot. Run này cũng là baseline seed 8 của giai đoạn xác nhận, nên không tốn thêm run.
+
 **Mức A (khuyến nghị nếu một run ≤ 10 giờ): 10 run, cộng 1 run có điều kiện.**
 
-| Giai đoạn | Run | Seed |
-| --- | --- | --- |
-| Pilot | R0: baseline | 7 |
-| Pilot | R1: FreqCone λ_ent = 0,03, A1 (giá trị chọn ở thí nghiệm tổng hợp) | 7 |
-| Pilot | R2: FreqCone λ_ent = 0,1, A1 | 7 |
-| Pilot | R3: FreqCone λ_ent = 0,1, A3 (nón rộng, nới giới hạn của Mệnh đề 5) | 7 |
-| Xác nhận | baseline × {8, 9, 10}; FreqCone (cấu hình được chọn) × {8, 9, 10} | 8–10 |
-| Có điều kiện | R0-repro: upstream nguyên trạng (còn bug), seed mặc định của upstream; chỉ chạy nếu G0 không đạt | upstream |
+Thứ tự: **B8 (G0) → R0, R1, R2, R3 (val) → chọn cấu hình → G1 → B9, B10, F8, F9, F10.**
+
+| Giai đoạn | Run | Seed | Tách val |
+| --- | --- | --- | --- |
+| G0 | B8: baseline | 8 | không |
+| Pilot | R0: baseline | 7 | có |
+| Pilot | R1: FreqCone λ_ent = 0,03, A1 (giá trị chọn ở thí nghiệm tổng hợp) | 7 | có |
+| Pilot | R2: FreqCone λ_ent = 0,1, A1 | 7 | có |
+| Pilot | R3: FreqCone λ_ent = 0,1, A3 (nón rộng, nới giới hạn của Mệnh đề 5) | 7 | có |
+| Xác nhận | B9, B10: baseline | 9, 10 | không |
+| Xác nhận | F8, F9, F10: FreqCone (cấu hình được chọn) | 8, 9, 10 | không |
+| Có điều kiện | R0-repro: upstream nguyên trạng (còn bug), seed mặc định của upstream; chỉ chạy nếu G0 không đạt | upstream | không |
 
 **Mức B (nếu ngân sách chỉ đủ khoảng 6 run): không có pilot.**
+
+Thứ tự: **B8 (G0) → F8, B9, F9, B10, F10. Tổng 6 run**, đều không tách val.
 - FreqCone dùng cấu hình cố định từ thí nghiệm tổng hợp: λ_ent = 0,03, A1, v2. Ghi rõ "không tinh chỉnh trên SSB".
-- Chạy baseline và FreqCone × seed {8, 9, 10}.
-- Không có cổng G1; G0 dùng baseline seed 8.
+- Không có cổng G1.
 
 ### 3.3 Cổng (luật cố định)
 - **G0 (tái lập baseline).**
-  - Hàng "Tiêu chí upstream" của R0 phải có All lệch số công bố của Hyp-SelEx trên Stanford Cars (**83,8 / 93,3 / 79,2**, Bảng 1 của HypCD) không quá ±2,0 điểm.
-  - Không đạt: chạy R0-repro. Nếu R0-repro đạt, ghi rằng chênh lệch do sửa bug và đi tiếp. Nếu R0-repro cũng không đạt, **dừng và báo người dùng**.
+  - Hàng "Chuẩn GCD" của B8 phải có All lệch số công bố của Hyp-SelEx trên Stanford Cars (**83,8 / 93,3 / 79,2**, Bảng 1 của HypCD) không quá ±2,0 điểm.
+  - Không đạt: chạy R0-repro (upstream nguyên trạng) để xem chênh lệch có do bản sửa không. Nếu R0-repro đạt, ghi rằng chênh lệch do sửa bug và đi tiếp. Nếu R0-repro cũng không đạt, **dừng và báo người dùng**.
 - **Chọn cấu hình (chỉ ở mức A).**
   - `select_pilot.py` chọn trong R1–R3 bằng val **ở epoch cuối**, theo luật 1-SE paired và stratified, B = 2000.
   - Phá hòa: λ nhỏ hơn trước, rồi nón rộng hơn trước.
   - Commit `selection.json` trước khi chạy `summarize_run.py` hay `compare_runs.py` trên R1–R3.
-- **G1 (mức A).** Ở hàng "Epoch cuối", cấu hình được chọn so với R0 phải có ΔNew ≥ +1,0 **và** ΔAll ≥ −0,5. Không đạt thì dừng nhánh "tăng ACC" và báo người dùng; đây là lúc cân nhắc nhánh B (đầu chiếu tách rời) trong PLAN_P1_PILOT mục 5.
-- **Kết luận cuối (sau seed 8–10), cố định trước:** FreqCone được coi là có đóng góp trên Stanford Cars nếu, ở hàng "Epoch cuối":
+- **G1 (mức A).** Ở **cả hai hàng chính**, cấu hình được chọn so với R0 phải có ΔNew ≥ +1,0 **và** ΔAll ≥ −0,5. Không đạt thì dừng nhánh "tăng ACC" và báo người dùng; đây là lúc cân nhắc nhánh B (đầu chiếu tách rời) trong PLAN_P1_PILOT mục 5.
+- **Kết luận cuối (sau seed 8–10, các run không tách val), cố định trước:** FreqCone được coi là có đóng góp trên Stanford Cars nếu, ở **cả hai hàng chính**:
   - ΔNew trung bình ≥ +1,0;
   - thắng ≥ 2/3 seed về New;
   - ΔAll trung bình ≥ −0,5.
@@ -303,6 +315,6 @@ Sau khi viết xong: chạy lại **đúng từng lệnh** trong README trên m�
 - [ ] 2.2–2.3 `summarize_run.py`, `compare_runs.py`, biểu đồ theo epoch; hàng oracle có nhãn
 - [ ] 3.0 Bảng c/r, batch, lr theo script upstream SCars; `compute_cutoffs.py --dataset scars`
 - [ ] 3.1 Profile SCars có đánh giá mỗi epoch, chọn mức A hoặc B, tag `pilot-v2`
-- [ ] 3.3 G0, chọn cấu hình (mức A), G1, xác nhận seed 8–10, kết luận theo luật cố định
+- [ ] 3.2–3.3 G0 trên B8, pilot và chọn cấu hình (mức A), G1, xác nhận seed 8–10 không tách val, kết luận theo luật cố định
 - [ ] 4. README đầy đủ 17 mục, đã chạy thử các lệnh không cần GPU
 - [ ] Báo người dùng ở các mốc: manifest dọn dẹp, profile, G0, G1, kết luận cuối (kèm JSON)

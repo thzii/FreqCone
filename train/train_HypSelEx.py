@@ -832,7 +832,8 @@ if __name__ == "__main__":
     test_loader_labelled = DataLoader(test_dataset, num_workers=args.num_workers, batch_size=int(args.batch_size / 2), shuffle=False)
     # >>> freqcone: hooks object (inactive unless --freqcone, --run_dir or --profile_steps is set)
     import sys as _fc_sys
-    FC_RUN = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'), datasets=datasets)
+    FC_RUN = FCRun(args, device, train_dataset=train_dataset, val_dataset=datasets.get('val'), datasets=datasets,
+                   train_copies=(train_dataset_test, unlabelled_train_examples_test))
     FC_RUN.install_quiet_output(_fc_sys.modules[__name__])
     # <<< freqcone
 

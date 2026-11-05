@@ -2,8 +2,11 @@
 #   UPSTREAM  upstream Hyp-SelEx exactly as scripts/train_HypSelEx.cmd runs it (DINOv2 row of the dataset), including
 #             that row's curvature c and clip radius r, plus --dist_impl lowmem (same distances as upstream, O(N^2)
 #             memory; tests_freqcone/test_dist_lowmem.py). Every run passes its own --seed.
-#   PILOT     flags of every run except R0-repro: GCD's known-class validation split, the fix of SelEx's pseudo-label
-#             order bug (SelEx issue #11), validation and test after every epoch, test numbers kept out of stdout
+#   CONFIRM   flags of the confirmation runs B8-B10, F8-F10: the fix of SelEx's pseudo-label order bug (SelEx issue
+#             #11), test after every epoch, test numbers kept out of stdout. No validation split: 100 % of the labelled
+#             images, as upstream, so that the numbers compare with the published ones
+#   PILOT     flags of the pilot runs R0-R3 and the probes: CONFIRM plus GCD's known-class validation split, which
+#             serves only to choose the configuration
 #   FC_CUTS   --fc_f_a / --fc_f_b from cutoffs.json (scripts/freqcone/compute_cutoffs.py); empty if missing
 #
 # Upstream DINOv2 rows of scripts/train_HypSelEx.cmd (used by every run, baseline included):
@@ -23,7 +26,8 @@ UPSTREAM=(--dataset_name "$DATASET" --batch_size 128 --grad_from_block 10 --epoc
           --contrast_unlabel_only False --transform imagenet --lr 0.1 --eval_funcs v2
           --c "$C" --cr "$CR" --dino v2 --mlp_out_dim 8192 --unsupervised_smoothing "$US" --hyper_max_weight "$HMW"
           --dist_impl lowmem)
-PILOT=(--split_train_val True --fix_label_order True --eval_every_epoch True --hide_test_stdout True)
+CONFIRM=(--fix_label_order True --eval_every_epoch True --hide_test_stdout True)
+PILOT=("${CONFIRM[@]}" --split_train_val True)
 FC_CUTS=()
 if [ -f cutoffs.json ]; then
   read -r FA FB < <(python -c "import json; d = json.load(open('cutoffs.json')).get('$DATASET'); print(*(d and (d['f_a'], d['f_b'])) or ('', ''))")

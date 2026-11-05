@@ -4,7 +4,9 @@
    ``# <<< freqcone``: deleting those blocks gives back the upstream file byte for byte
    (line endings normalised, since git may check files out with CRLF).
 2. Every inserted block is inactive with the default flags (FCRun.enabled is False, the distance
-   wrapper calls the upstream function), checked below.
+   wrapper calls the upstream function), checked below. The one exception computes nothing: K_Means casts an
+   index tensor to int64, which it already is on Linux (test_k_means_runs_with_an_int32_arange).
+3. No other upstream file differs from the upstream commit.
 """
 import argparse
 import importlib
@@ -20,7 +22,10 @@ import torch
 from conftest import ROOT
 
 UPSTREAM_COMMIT = 'ffc895b7ff38be8502bb7e3bd851f1d2a55dff73'
-PATCHED_FILES = ['train/train_HypSelEx.py', 'data/get_datasets.py', 'hyptorch/pmath.py']
+PATCHED_FILES = ['train/train_HypSelEx.py', 'data/get_datasets.py', 'hyptorch/pmath.py',
+                 'methods/clustering/faster_mix_k_means_pytorch.py']
+OWN_CHANGES = ['README.md']                    # upstream's text moved to docs/UPSTREAM_README.md
+LOCAL_FILES = ['config.py']                    # machine paths, filled in locally (README section 6)
 START, END = re.compile(r'^\s*# >>> freqcone'), re.compile(r'^\s*# <<< freqcone')
 
 
@@ -55,6 +60,14 @@ def test_only_marked_insertions(path):
         patched = f.read().replace('\r\n', '\n')
     assert '# >>> freqcone' in patched, f'{path} has no FreqCone block (nothing to check)'
     assert strip_blocks(patched) == upstream_text(path)
+
+
+def test_no_other_upstream_file_changed():
+    res = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=MD', UPSTREAM_COMMIT], cwd=ROOT,
+                         capture_output=True, text=True, timeout=60)
+    if res.returncode != 0:
+        pytest.skip(f'upstream commit not available: {res.stderr[:200]}')
+    assert sorted(set(res.stdout.splitlines()) - set(LOCAL_FILES)) == sorted(PATCHED_FILES + OWN_CHANGES)
 
 
 def fc_args(**overrides):

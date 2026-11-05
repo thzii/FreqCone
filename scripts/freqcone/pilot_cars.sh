@@ -8,19 +8,27 @@
 #              D = 8192, c 0.1, r 2.0, smoothing 0.5, hyper_max_weight 0.5; O(N^2) distance (same values as upstream).
 # FREQCONE     v2, lambda_dir 0.5, lambda_con 0.05, tau_a 0.5, tau_b 0.3, K 0.1; cut-offs from cutoffs.json (scars);
 #              coarse resolution from runs/profile_scars/decision.json.
-# EVALUATION   validation and test after every epoch (isolated random state); test numbers only in
+# EVALUATION   test after every epoch, validation too in the pilot (isolated random state); test numbers only in
 #              runs/<id>/epochs_test.jsonl. Gates and conclusions use the two main rows (GCD standard, last epoch).
 #
-# LEVEL A (decision.json level A: one run <= 10 GPU-hours)
-#   pilot, seed 7:  R0 baseline;  R1 FreqCone lambda_ent 0.03, A1;  R2 lambda 0.1, A1;  R3 lambda 0.1, A3
-#   confirmation:   base_s8, base_s9, base_s10;  fc_s8, fc_s9, fc_s10 with the selected configuration
-# LEVEL B (otherwise): no pilot; FreqCone fixed at lambda_ent 0.03, A1, v2 ("not tuned on SSB");
-#   base_s8, base_s9, base_s10;  fc_s8, fc_s9, fc_s10.  No G1; G0 on base_s8.
+# DATA MODES   The validation split serves only to choose the configuration.
+#   pilot         R0-R3, seed 7: validation split held out (20 % of the labelled images of each known class), for the
+#                 1-SE selection and G1. The comparison stays fair: both arms lose the same images.
+#   confirmation  B8-B10 baseline, F8-F10 FreqCone: no validation split, 100 % of the labelled images. Upstream trains
+#                 on all of them, so only these runs compare with the published numbers. Their tables have the two
+#                 main rows and the oracle rows, no "best validation" row.
+#
+# LEVEL A (decision.json level A: one run <= 10 GPU-hours), 10 runs:
+#   B8 (G0) -> R0, R1, R2, R3 -> selection -> G1 -> B9, B10, F8, F9, F10
+#   R0 baseline; R1 FreqCone lambda_ent 0.03, A1; R2 lambda 0.1, A1; R3 lambda 0.1, A3; F* with the selected configuration
+# LEVEL B (otherwise), 6 runs, no pilot, no G1; FreqCone fixed at lambda_ent 0.03, A1, v2 ("not tuned on SSB"):
+#   B8 (G0) -> F8, B9, F9, B10, F10
 # CONDITIONAL      R0-repro: upstream as is (label-order bug kept, no validation split), upstream's default seed 1,
 #                  only if G0 fails.
 #
-# G0      Row (1) "GCD standard" (upstream's best-checkpoint rule: Old on the disjoint test split) of R0 (level A) or
-#         base_s8 (level B): |All - 83.8| <= 2.0 (Hyp-SelEx, Stanford Cars, DINOv2: 83.8 / 93.3 / 79.2, HypCD
+# G0      Runs first, on B8 (baseline, seed 8, no validation split, label-order fix), which is also the baseline of seed
+#         8 of the confirmation, so it costs no extra run. Row (1) "GCD standard" (upstream's best-checkpoint rule: Old on
+#         the disjoint test split): |All - 83.8| <= 2.0 (Hyp-SelEx, Stanford Cars, DINOv2: 83.8 / 93.3 / 79.2, HypCD
 #         Table 1). Fail -> run R0-repro: if it passes, record that the gap comes from the bug fix and go on; if it
 #         also fails, stop and report.
 # SELECT  (level A) freqcone/select_pilot.py on R1-R3: validation metric at the last epoch, 1-SE rule with a paired,
@@ -71,6 +79,9 @@ run() {
   python -m freqcone.pilot_tools budget "$RUNS" "$DECISION" || { echo "over budget: report before going on"; exit 3; }
 }
 
+baseline() { run "B$1" "$1" "${UPSTREAM[@]}" "${CONFIRM[@]}" "${DIAG[@]}"; }
+freqcone() { run "F$1" "$1" "${UPSTREAM[@]}" "${CONFIRM[@]}" "${FC[@]}" --w_ent "$W" --aperture "$A"; }
+
 g0_or_repro() {
   if python -m freqcone.pilot_tools g0 "$1"; then return 0; fi
   echo "G0 failed on $1: running R0-repro (upstream as is, seed 1)"
@@ -83,9 +94,10 @@ g0_or_repro() {
   exit 2
 }
 
+baseline 8
+g0_or_repro "$RUNS/B8"
 if [ "$LEVEL" = A ]; then
   run R0 7 "${UPSTREAM[@]}" "${PILOT[@]}" "${DIAG[@]}"
-  g0_or_repro "$RUNS/R0"
   run R1 7 "${UPSTREAM[@]}" "${PILOT[@]}" "${FC[@]}" --w_ent 0.03 --aperture A1
   run R2 7 "${UPSTREAM[@]}" "${PILOT[@]}" "${FC[@]}" --w_ent 0.1 --aperture A1
   run R3 7 "${UPSTREAM[@]}" "${PILOT[@]}" "${FC[@]}" --w_ent 0.1 --aperture A3
@@ -97,17 +109,19 @@ if [ "$LEVEL" = A ]; then
   read -r SEL W A < <(python -c "import json; s = json.load(open('$RUNS/selection.json'))['selected']; print(s['run_id'], s['w_ent'], s['aperture'])")
   python -m freqcone.compare_runs --base "$RUNS/R0" --fc "$RUNS/$SEL" --gate g1 --out "$RUNS/g1.json" \
     || { echo "G1 failed: stop the accuracy branch and report"; exit 4; }
-  run base_s8 8 "${UPSTREAM[@]}" "${PILOT[@]}" "${DIAG[@]}"
+  baseline 9
+  baseline 10
+  freqcone 8
+  freqcone 9
+  freqcone 10
 else
   W=0.03; A=A1                                               # level B: fixed, not tuned on SSB
-  run base_s8 8 "${UPSTREAM[@]}" "${PILOT[@]}" "${DIAG[@]}"
-  g0_or_repro "$RUNS/base_s8"
+  freqcone 8
+  baseline 9
+  freqcone 9
+  baseline 10
+  freqcone 10
 fi
-run base_s9 9 "${UPSTREAM[@]}" "${PILOT[@]}" "${DIAG[@]}"
-run base_s10 10 "${UPSTREAM[@]}" "${PILOT[@]}" "${DIAG[@]}"
-for s in 8 9 10; do
-  run "fc_s$s" "$s" "${UPSTREAM[@]}" "${PILOT[@]}" "${FC[@]}" --w_ent "$W" --aperture "$A"
-done
-python -m freqcone.compare_runs --base "$RUNS"/base_s8 "$RUNS"/base_s9 "$RUNS"/base_s10 \
-    --fc "$RUNS"/fc_s8 "$RUNS"/fc_s9 "$RUNS"/fc_s10 --gate final --plot "$RUNS/compare_final.png" \
+python -m freqcone.compare_runs --base "$RUNS"/B8 "$RUNS"/B9 "$RUNS"/B10 \
+    --fc "$RUNS"/F8 "$RUNS"/F9 "$RUNS"/F10 --gate final --plot "$RUNS/compare_final.png" \
     --out "$RUNS/compare_final.json" | tee "$RUNS/compare_final.md"

@@ -246,6 +246,9 @@ class K_Means:
                                 sparse_cluster[idx]=False
                         cluster_distance=torch.argsort(dist[cluster_free_unseen.cpu(), :][:, sparse_cluster], dim=1)
                         mid_labels = torch.from_numpy(np.arange(self.k))[sparse_cluster][cluster_distance]
+                        # >>> freqcone: np.arange is int32 on Windows with NumPy 1.x; the index put below needs int64 (no-op on Linux)
+                        mid_labels = mid_labels.long()
+                        # <<< freqcone
                         if mid_labels.shape[1]!=0:
                             u_labels[cluster_free_unseen] = mid_labels[:, 0]
                             cluster_free_unseen[0:] = False
